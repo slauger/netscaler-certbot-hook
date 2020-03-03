@@ -261,7 +261,7 @@ else:
   nitro_install_cert(nitro_client, args.name, cert="{}-{}.crt".format(args.name, timestamp), key="{}-{}.key".format(args.name, timestamp))
   print("link certificate {} to chain certificate {}".format(args.name, args.chain))
   nitro_link_cert(nitro_client, args.name, args.chain)
-  print("saving configuration"
+  print("saving configuration")
   nitro_save_config(nitro_client)
 
 sys.exit(0)
