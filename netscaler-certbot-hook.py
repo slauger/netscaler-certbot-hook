@@ -147,6 +147,17 @@ def nitro_link_cert(nitro_client, name, chain):
     params={'action': 'link'},
   )
 
+def nitro_save_config(nitro_client):
+  return nitro_client.request(
+    'post',
+    endpoint='config',
+    objecttype='nsconfig',
+    data=json.dumps({
+      'nsconfig': {}
+    }),
+    params={'action': 'save'},
+  )
+
 # add cli arguments
 parser = argparse.ArgumentParser(description='command line arguments.')
 
@@ -234,11 +245,12 @@ if check_cert:
     print("update certificate {}".format(args.name))
     nitro_install_cert(nitro_client, args.name, cert="{}-{}.crt".format(args.name, timestamp), key="{}-{}.key".format(args.name, timestamp), update=True)
     print("link certificate {} to chain certificate {}".format(args.name, args.chain))
-    nitro_link_cert(nitro_client, args.name, args.chain)
-    #print("delete old certificate {}".format(check_cert['sslcertkey'][0]['cert'].split('/')[-1:][0]))
-    #nitro_delete(nitro_client, check_cert['sslcertkey'][0]['cert'].split('/')[-1:][0])
-    #print("delete old private key {}".format(check_cert['sslcertkey'][0]['key'].split('/')[-1:][0]))
-    #nitro_delete(nitro_client, check_cert['sslcertkey'][0]['key'].split('/')[-1:][0])
+    try:
+      nitro_link_cert(nitro_client, args.name, args.chain)
+    except:
+      print("certificate link was already present - nothing to do")
+    print("saving configuration")
+    nitro_save_config(nitro_client)
 else:
   print("certificate {} not found".format(args.name))
   print("uploading certificate as {}-{}.crt".format(args.name, timestamp))
@@ -248,6 +260,11 @@ else:
   print("installing certificate with serial {}".format(cert_serial))
   nitro_install_cert(nitro_client, args.name, cert="{}-{}.crt".format(args.name, timestamp), key="{}-{}.key".format(args.name, timestamp))
   print("link certificate {} to chain certificate {}".format(args.name, args.chain))
-  nitro_link_cert(nitro_client, args.name, args.chain)
+  try:
+    nitro_link_cert(nitro_client, args.name, args.chain)
+  except:
+    print("certificate link was already present - nothing to do")
+  print("saving configuration")
+  nitro_save_config(nitro_client)
 
 sys.exit(0)
