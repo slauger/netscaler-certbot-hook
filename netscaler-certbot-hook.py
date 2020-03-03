@@ -259,10 +259,10 @@ else:
   print("installing certificate with serial {}".format(cert_serial))
   nitro_install_cert(nitro_client, args.name, cert="{}-{}.crt".format(args.name, timestamp), key="{}-{}.key".format(args.name, timestamp))
   print("link certificate {} to chain certificate {}".format(args.name, args.chain))
-    try:
-      nitro_link_cert(nitro_client, args.name, args.chain)
-    except:
-      print("certificate link was already present - nothing to do")
+  try:
+    nitro_link_cert(nitro_client, args.name, args.chain)
+  except:
+    print("certificate link was already present - nothing to do")
   print("saving configuration")
   nitro_save_config(nitro_client)
 
