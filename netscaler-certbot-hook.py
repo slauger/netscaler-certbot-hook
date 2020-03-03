@@ -51,7 +51,7 @@ add_args = {
   },
   '--chain-cert': {
     'metavar': '<file>',
-    'help': 'path to the ssl private key (default: /etc/letsencrypt/live/name/chain.pem)',
+    'help': 'path to the ssl chain certificate (default: /etc/letsencrypt/live/name/chain.pem)',
     'type': str,
     'default': None,
     'required': False,
