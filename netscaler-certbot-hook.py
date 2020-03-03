@@ -150,7 +150,8 @@ def nitro_link_cert(nitro_client, name, chain):
 def nitro_save_config(nitro_client):
   return nitro_client.request(
     'post',
-    endpoint='nsconfig',
+    endpoint='cnfig',
+    objecttype='nsconfig',
     data=json.dumps({
       'nsconfig': {}
     }),
