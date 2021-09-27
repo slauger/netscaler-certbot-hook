@@ -171,7 +171,7 @@ args = parser.parse_args()
 # get credentials from environment
 username   = os.getenv('NS_LOGIN', 'nsroot')
 password   = os.getenv('NS_PASSWORD', 'nsroot')
-verify_ssl = os.getenv('NS_VERIFY_SSL', True)
+verify_ssl = os.getenv('NS_VERIFY_SSL', 'yes').lower() in ('yes', 'true', '1')
 url        = os.getenv('NS_URL', None)
 
 # default to certbot cert
