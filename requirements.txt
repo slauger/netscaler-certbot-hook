@@ -1,0 +1,8 @@
+# NetScaler Certbot Hook Requirements
+# Python 3.6+
+
+# SSL/TLS Certificate handling
+pyOpenSSL>=20.0.0
+
+# HTTP requests for NITRO API
+requests>=2.25.0
