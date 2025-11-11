@@ -1,6 +1,20 @@
 # CHANGELOG
 
+## v1.0.3 (2025-11-11)
+
+### Fix
+
+* fix(docs): optimize architecture diagram - convert to JPG
+
+- Convert PNG to JPG for better compression (1.6MB → 243KB)
+- 85% quality maintains visual clarity
+- Faster loading on PyPI and GitHub ([`eb53179`](https://github.com/slauger/netscaler-certbot-hook/commit/eb53179bec6f9201d4881d5e007b99636f18442d))
+
 ## v1.0.2 (2025-11-11)
+
+### Chore
+
+* chore(release): 1.0.2 ([`4a2466f`](https://github.com/slauger/netscaler-certbot-hook/commit/4a2466f36c327675684e0c129ec4e1024cf226bc))
 
 ### Fix
 
