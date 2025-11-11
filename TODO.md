@@ -1,6 +1,6 @@
 # TODO: Repository Verbesserungen
 
-## ✅ Phase 1: Code-Qualität & Struktur (COMPLETED)
+## ✅ Phase 1: Code-Qualität & Struktur (FULLY COMPLETED)
 
 ### 1.1 Fehlerbehandlung verbessern ✅
 - [x] Spezifische Exception-Typen statt leerer `except:` Blöcke verwenden
@@ -16,10 +16,11 @@
 - [x] Konfiguration in eigene Klasse/Funktion auslagern
 - [x] Main-Funktion erstellen mit `if __name__ == '__main__':`
 
-### 1.3 Logging-Framework 🔄
-- [ ] `print()` Statements durch `logging` Modul ersetzen
-- [ ] Log-Level konfigurierbar machen (DEBUG, INFO, WARNING, ERROR)
-- [ ] Strukturiertes Logging für bessere Nachvollziehbarkeit
+### 1.3 Logging-Framework ✅
+- [x] `print()` Statements durch `logging` Modul ersetzen
+- [x] Log-Level konfigurierbar machen (DEBUG, INFO, WARNING, ERROR)
+- [x] Strukturiertes Logging für bessere Nachvollziehbarkeit
+- [x] `--verbose` und `--quiet` Flags hinzugefügt
 
 ### 1.4 Type Hints & Docstrings ✅
 - [x] Type Hints zu allen Funktionen hinzufügen

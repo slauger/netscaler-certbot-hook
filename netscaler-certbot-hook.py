@@ -52,9 +52,13 @@ import json
 import time
 import base64
 import urllib.parse
+import logging
 from typing import Dict, Optional, Union, Any
 from OpenSSL import crypto
 import nitro
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 add_args = {
   '--name': {
@@ -92,6 +96,18 @@ add_args = {
     'default': None,
     'required': False,
   },
+  '--verbose': {
+    'help': 'enable verbose output (DEBUG level)',
+    'action': 'store_true',
+    'default': False,
+    'required': False,
+  },
+  '--quiet': {
+    'help': 'suppress all output except errors (ERROR level)',
+    'action': 'store_true',
+    'default': False,
+    'required': False,
+  },
 }
 
 def add_argument(parser: argparse.ArgumentParser, arg: str, params: Dict[str, Any]) -> None:
@@ -100,16 +116,23 @@ def add_argument(parser: argparse.ArgumentParser, arg: str, params: Dict[str, An
     Args:
         parser (argparse.ArgumentParser): The argument parser instance.
         arg (str): The argument name (e.g., '--name').
-        params (dict): Argument parameters (metavar, type, help, default, required).
+        params (dict): Argument parameters (metavar, type, help, default, required, action).
     """
-    parser.add_argument(
-        arg,
-        metavar=params['metavar'],
-        type=params['type'],
-        help=params['help'],
-        default=params['default'],
-        required=params['required']
-    )
+    # Build kwargs dynamically based on params
+    kwargs = {'help': params['help']}
+
+    if 'metavar' in params:
+        kwargs['metavar'] = params['metavar']
+    if 'type' in params:
+        kwargs['type'] = params['type']
+    if 'default' in params:
+        kwargs['default'] = params['default']
+    if 'required' in params:
+        kwargs['required'] = params['required']
+    if 'action' in params:
+        kwargs['action'] = params['action']
+
+    parser.add_argument(arg, **kwargs)
 
 
 def nitro_check_cert(nitro_client: nitro.NitroClient, objectname: str) -> Union[Dict[str, Any], bool]:
@@ -430,18 +453,18 @@ def process_chain_certificate(nitro_client: nitro.NitroClient, config: Dict[str,
 
     if check_chain:
         installed_serial = int(check_chain['sslcertkey'][0]['serial'], 16)
-        print("chain certificate {} found with serial {}".format(config['chain_name'], installed_serial))
+        logger.info("chain certificate %s found with serial %s", config['chain_name'], installed_serial)
 
         if installed_serial == chain_serial:
-            print("installed chain certificate matches our serial - nothing to do")
+            logger.info("installed chain certificate matches our serial - nothing to do")
         else:
             raise Exception('serial of installed chain certificate does not match our serial')
     else:
-        print("chain certificate {} not found".format(config['chain_name']))
+        logger.info("chain certificate %s not found", config['chain_name'])
         chain_filename = '{}-{}.crt'.format(config['chain_name'], config['timestamp'])
-        print("uploading chain certificate as {}".format(chain_filename))
+        logger.info("uploading chain certificate as %s", chain_filename)
         nitro_upload(nitro_client, config['chain_file'], chain_filename)
-        print("installing chain certificate with serial {}".format(chain_serial))
+        logger.info("installing chain certificate with serial %s", chain_serial)
         nitro_install_cert(nitro_client, config['chain_name'], cert=chain_filename)
 
 
@@ -466,26 +489,26 @@ def install_or_update_certificate(nitro_client: nitro.NitroClient, config: Dict[
     cert_filename = '{}-{}.crt'.format(config['cert_name'], config['timestamp'])
     key_filename = '{}-{}.key'.format(config['cert_name'], config['timestamp'])
 
-    print("uploading certificate as {}".format(cert_filename))
+    logger.info("uploading certificate as %s", cert_filename)
     nitro_upload(nitro_client, config['cert_file'], cert_filename)
-    print("uploading private key as {}".format(key_filename))
+    logger.info("uploading private key as %s", key_filename)
     nitro_upload(nitro_client, config['privkey_file'], key_filename)
 
     if update:
-        print("update certificate {}".format(config['cert_name']))
+        logger.info("update certificate %s", config['cert_name'])
     else:
-        print("installing certificate with serial {}".format(cert_serial))
+        logger.info("installing certificate with serial %s", cert_serial)
 
     nitro_install_cert(nitro_client, config['cert_name'], cert=cert_filename, key=key_filename, update=update)
 
-    print("link certificate {} to chain certificate {}".format(config['cert_name'], config['chain_name']))
+    logger.info("link certificate %s to chain certificate %s", config['cert_name'], config['chain_name'])
     try:
         nitro_link_cert(nitro_client, config['cert_name'], config['chain_name'])
     except Exception as e:
         # Link already exists, which is fine
-        print("certificate link was already present - nothing to do")
+        logger.info("certificate link was already present - nothing to do")
 
-    print("saving configuration")
+    logger.info("saving configuration")
     nitro_save_config(nitro_client)
 
 
@@ -509,25 +532,56 @@ def process_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Union
 
     if check_cert:
         installed_serial = int(check_cert['sslcertkey'][0]['serial'], 16)
-        print("certificate {} found with serial {}".format(config['cert_name'], installed_serial))
+        logger.info("certificate %s found with serial %s", config['cert_name'], installed_serial)
 
         if installed_serial == cert_serial:
-            print("installed certificate matches our serial - nothing to do")
+            logger.info("installed certificate matches our serial - nothing to do")
         else:
             install_or_update_certificate(nitro_client, config, cert_serial, update=True)
     else:
-        print("certificate {} not found".format(config['cert_name']))
+        logger.info("certificate %s not found", config['cert_name'])
         install_or_update_certificate(nitro_client, config, cert_serial, update=False)
+
+def setup_logging(verbose: bool = False, quiet: bool = False) -> None:
+    """Configure logging based on verbosity flags.
+
+    Args:
+        verbose (bool): Enable DEBUG level logging if True.
+        quiet (bool): Suppress all but ERROR level logging if True.
+
+    Note:
+        If both verbose and quiet are True, verbose takes precedence.
+    """
+    # Determine log level
+    if verbose:
+        log_level = logging.DEBUG
+    elif quiet:
+        log_level = logging.ERROR
+    else:
+        log_level = logging.INFO
+
+    # Configure logging format
+    log_format = '%(message)s'
+    if verbose:
+        # More detailed format for debug mode
+        log_format = '%(levelname)s: %(message)s'
+
+    logging.basicConfig(
+        level=log_level,
+        format=log_format,
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
 
 def main() -> None:
     """Main entry point for certificate installation and management.
 
     This function orchestrates the entire certificate installation workflow:
     1. Parses command line arguments
-    2. Loads and validates configuration
-    3. Connects to NetScaler via NITRO API
-    4. Processes chain certificate (install if needed)
-    5. Processes main certificate (install or update as needed)
+    2. Configures logging based on verbosity flags
+    3. Loads and validates configuration
+    4. Connects to NetScaler via NITRO API
+    5. Processes chain certificate (install if needed)
+    6. Processes main certificate (install or update as needed)
 
     The function handles the complete lifecycle including validation, upload,
     installation, linking, and configuration persistence.
@@ -544,11 +598,21 @@ def main() -> None:
     Example:
         This function is called when the script is run directly:
         $ python3 netscaler-certbot-hook.py --name mydomain.com
+        $ python3 netscaler-certbot-hook.py --name mydomain.com --verbose
+        $ python3 netscaler-certbot-hook.py --name mydomain.com --quiet
     """
     args = parse_arguments()
+
+    # Setup logging
+    setup_logging(verbose=args.verbose, quiet=args.quiet)
+
+    logger.debug("Starting NetScaler Certbot Hook")
+    logger.debug("Certificate name: %s", args.name)
+
     config = get_config(args)
 
     # Initialize NITRO client
+    logger.debug("Connecting to NetScaler at %s", config['url'])
     nitro_client = nitro.NitroClient(config['url'], config['username'], config['password'])
     nitro_client.set_verify(config['verify_ssl'])
     nitro_client.on_error('continue')
@@ -559,11 +623,17 @@ def main() -> None:
     # Process main certificate
     process_certificate(nitro_client, config)
 
+    logger.debug("NetScaler Certbot Hook completed successfully")
+
 
 if __name__ == '__main__':
     try:
         main()
         sys.exit(0)
     except Exception as e:
-        print("Error: {}".format(e))
+        # Use basic print for error before logging is configured, or logger if available
+        if logger.hasHandlers():
+            logger.error("Error: %s", e)
+        else:
+            print("Error: {}".format(e), file=sys.stderr)
         sys.exit(1)

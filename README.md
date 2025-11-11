@@ -90,6 +90,8 @@ python3 netscaler-certbot-hook.py --help
 | `--cert` | No | `/etc/letsencrypt/live/<name>/cert.pem` | Path to certificate file |
 | `--privkey` | No | `/etc/letsencrypt/live/<name>/privkey.pem` | Path to private key file |
 | `--chain-cert` | No | `/etc/letsencrypt/live/<name>/chain.pem` | Path to chain certificate file |
+| `--verbose` | No | `false` | Enable verbose output (DEBUG level) |
+| `--quiet` | No | `false` | Suppress all output except errors |
 
 ## Usage
 
@@ -145,6 +147,20 @@ python3 netscaler-certbot-hook.py --name example.com \
 python3 netscaler-certbot-hook.py --name example.com --chain my-chain
 ```
 
+#### Verbose Output for Debugging:
+
+```bash
+# Enable detailed DEBUG logging
+python3 netscaler-certbot-hook.py --name example.com --verbose
+```
+
+#### Quiet Mode for Cron Jobs:
+
+```bash
+# Suppress all output except errors
+python3 netscaler-certbot-hook.py --name example.com --quiet
+```
+
 ### Step 3: Automate with Cron
 
 Add to your crontab for automatic renewal:
@@ -169,6 +185,57 @@ python3 /path/to/netscaler-certbot-hook.py --name $RENEWED_DOMAINS
 Make it executable:
 ```bash
 chmod +x /etc/letsencrypt/renewal-hooks/deploy/netscaler-hook.sh
+```
+
+## Logging
+
+The script uses Python's built-in logging framework for structured output. You can control the verbosity with command-line flags:
+
+### Log Levels
+
+| Flag | Log Level | Use Case |
+|------|-----------|----------|
+| *default* | `INFO` | Standard output showing progress |
+| `--verbose` | `DEBUG` | Detailed output for troubleshooting |
+| `--quiet` | `ERROR` | Minimal output, only errors |
+
+### Examples
+
+**Standard Output (INFO level):**
+```bash
+python3 netscaler-certbot-hook.py --name example.com
+```
+Shows all important operations and their status.
+
+**Verbose Mode (DEBUG level):**
+```bash
+python3 netscaler-certbot-hook.py --name example.com --verbose
+```
+Shows additional debugging information including:
+- Connection details
+- Configuration values
+- Detailed operation steps
+
+**Quiet Mode (ERROR level):**
+```bash
+python3 netscaler-certbot-hook.py --name example.com --quiet
+```
+Only shows errors. Perfect for cron jobs where you only want to be notified of failures.
+
+### Logging for Cron Jobs
+
+For automated cron jobs, use `--quiet` to suppress normal output:
+
+```bash
+# Only log errors to file
+0 3 * * * python3 /path/to/netscaler-certbot-hook.py --name example.com --quiet 2>> /var/log/netscaler-cert-errors.log
+```
+
+Or use standard output with log rotation:
+
+```bash
+# Log all output with rotation
+0 3 * * * python3 /path/to/netscaler-certbot-hook.py --name example.com >> /var/log/netscaler-cert.log 2>&1
 ```
 
 ## Example Output
