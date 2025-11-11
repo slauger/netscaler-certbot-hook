@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "netscaler-certbot-hook"
-version = "1.0.1"
+version = "1.0.2"
 authors = [
     {name = "Simon Lauger", email = "simon@lauger.de"}
 ]

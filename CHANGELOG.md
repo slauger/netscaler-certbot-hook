@@ -1,6 +1,21 @@
 # CHANGELOG
 
+## v1.0.2 (2025-11-11)
+
+### Fix
+
+* fix(docs): update architecture diagram for better clarity
+
+- Replace architecture.png with improved horizontal layout
+- Use absolute GitHub URL for PyPI compatibility
+- Wider format for better readability on all platforms
+- Professional design showing the complete workflow ([`f422e44`](https://github.com/slauger/netscaler-certbot-hook/commit/f422e44b088d4ae490c3b06f8093c0dc99e4f3fc))
+
 ## v1.0.1 (2025-11-11)
+
+### Chore
+
+* chore(release): 1.0.1 ([`f58002a`](https://github.com/slauger/netscaler-certbot-hook/commit/f58002a4becc67e369c13bef89b69db0a70141c7))
 
 ### Ci
 
