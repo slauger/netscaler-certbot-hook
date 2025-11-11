@@ -180,7 +180,7 @@ When trust chains change (e.g., Let's Encrypt root certificate updates), use the
 
 ```bash
 # Allow chain certificate updates when serial differs
-python3 netscaler-certbot-hook.py --name example.com --update-chain
+netscaler-certbot-hook --name example.com --update-chain
 ```
 
 **Note:** By default, the script will refuse to update chain certificates if the serial number differs. This is a security measure to prevent unexpected trust chain changes. Use `--update-chain` only when you are certain the new chain certificate is valid and expected.
@@ -316,7 +316,7 @@ By default, the script does **not** automatically update chain certificates if t
 **To enable chain certificate updates**, use the `--update-chain` flag:
 
 ```bash
-python3 netscaler-certbot-hook.py --name example.com --update-chain
+netscaler-certbot-hook --name example.com --update-chain
 ```
 
 **When to use `--update-chain`:**
