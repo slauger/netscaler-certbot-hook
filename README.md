@@ -21,7 +21,7 @@ Perfect for automating certificate lifecycle management in combination with DNS-
 
 ## Architecture
 
-![Architecture](architecture.png)
+![Architecture](https://raw.githubusercontent.com/slauger/netscaler-certbot-hook/master/architecture.png)
 
 The script connects to your NetScaler via NITRO API, compares certificate serial numbers, and performs uploads/installations only when necessary. Chain certificates are handled separately for security reasons.
 
