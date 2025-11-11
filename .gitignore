@@ -79,3 +79,6 @@ venv.bak/
 
 # Logs
 *.log
+
+# Project-specific
+TODO.md

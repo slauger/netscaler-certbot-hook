@@ -13,7 +13,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="netscaler-certbot-hook",
-    version="0.0.1",
+    version="1.0.0",
     author="Simon Lauger",
     author_email="simon@lauger.de",
     description="A Certbot Hook for Citrix NetScaler ADC",
@@ -23,7 +23,7 @@ setup(
     py_modules=["netscaler-certbot-hook", "nitro"],
     license="MIT",
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: System Administrators",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",

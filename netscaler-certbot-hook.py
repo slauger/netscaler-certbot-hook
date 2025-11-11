@@ -34,13 +34,13 @@ Examples:
 
 Author: Simon Lauger <simon@lauger.de>
 License: MIT
-Version: 0.0.1
+Version: 1.0.0
 Copyright: Copyright 2020, IT Consulting Simon Lauger
 """
 
 __author__ = "Simon Lauger"
 __email__ = "simon@lauger.de"
-__version__ = "0.0.1"
+__version__ = "1.0.0"
 __license__ = "MIT"
 __copyright__ = "Copyright 2020, IT Consulting Simon Lauger"
 __maintainer__ = "Simon Lauger"
