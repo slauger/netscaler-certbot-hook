@@ -11,14 +11,12 @@ authors = [
 description = "Automated SSL certificate management for Citrix NetScaler ADC using Certbot"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.6"
+requires-python = ">=3.8"
 keywords = ["netscaler", "citrix", "adc", "certbot", "letsencrypt", "ssl", "certificate", "automation"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: System Administrators",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.6",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",

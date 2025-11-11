@@ -1,7 +1,7 @@
 # NetScaler Certbot Hook
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 Automated SSL certificate management for Citrix NetScaler ADC. This tool seamlessly integrates with Certbot to install and renew Let's Encrypt certificates on NetScaler appliances via the NITRO API.
 
@@ -27,7 +27,7 @@ The script connects to your NetScaler via NITRO API, compares certificate serial
 
 ## Prerequisites
 
-- **Python** 3.6 or higher
+- **Python** 3.8 or higher
 - **Citrix NetScaler ADC** with NITRO API access
 - **Certbot** (for Let's Encrypt certificate enrollment)
 - **Network access** to NetScaler management interface
