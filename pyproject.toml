@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netscaler-certbot-hook"
+version = "1.0.0"
+authors = [
+    {name = "Simon Lauger", email = "simon@lauger.de"}
+]
+description = "Automated SSL certificate management for Citrix NetScaler ADC using Certbot"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.6"
+keywords = ["netscaler", "citrix", "adc", "certbot", "letsencrypt", "ssl", "certificate", "automation"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "pyOpenSSL>=20.0.0",
+    "requests>=2.25.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/slauger/netscaler-certbot-hook"
+Documentation = "https://github.com/slauger/netscaler-certbot-hook#readme"
+Repository = "https://github.com/slauger/netscaler-certbot-hook"
+Issues = "https://github.com/slauger/netscaler-certbot-hook/issues"
+Changelog = "https://github.com/slauger/netscaler-certbot-hook/blob/master/CHANGELOG.md"
+
+[project.scripts]
+netscaler-certbot-hook = "netscaler_certbot_hook.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["netscaler_certbot_hook*"]

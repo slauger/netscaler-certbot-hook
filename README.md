@@ -34,21 +34,31 @@ The script connects to your NetScaler via NITRO API, compares certificate serial
 
 ## Installation
 
-### Option 1: Using pip (Recommended)
+### Option 1: From PyPI (Recommended)
+
+```bash
+# Install directly from PyPI
+pip install netscaler-certbot-hook
+```
+
+After installation, the `netscaler-certbot-hook` command will be available system-wide.
+
+### Option 2: From Source
 
 ```bash
 # Clone the repository
 git clone https://github.com/slauger/netscaler-certbot-hook.git
 cd netscaler-certbot-hook
 
-# Install dependencies
-pip install -r requirements.txt
+# Install in development mode
+pip install -e .
 ```
 
-### Option 2: Install as package
+### Option 3: Install dependencies only
 
 ```bash
-pip install -e .
+# For manual script execution
+pip install -r requirements.txt
 ```
 
 ### Dependencies
@@ -80,8 +90,10 @@ export NS_VERIFY_SSL=true
 ### Command-Line Arguments
 
 ```bash
-python3 netscaler-certbot-hook.py --help
+netscaler-certbot-hook --help
 ```
+
+**Note:** If installed from PyPI, use `netscaler-certbot-hook`. If running from source, use `netscaler-certbot-hook` or `python3 -m netscaler_certbot_hook`.
 
 | Argument | Required | Default | Description |
 |----------|----------|---------|-------------|
@@ -130,13 +142,13 @@ certbot certonly --manual --preferred-challenges dns -d example.com
 #### Basic Usage (Default Paths):
 
 ```bash
-python3 netscaler-certbot-hook.py --name example.com
+netscaler-certbot-hook --name example.com
 ```
 
 #### Custom Certificate Paths:
 
 ```bash
-python3 netscaler-certbot-hook.py --name example.com \
+netscaler-certbot-hook --name example.com \
   --cert /path/to/cert.pem \
   --privkey /path/to/privkey.pem \
   --chain-cert /path/to/chain.pem
@@ -145,21 +157,21 @@ python3 netscaler-certbot-hook.py --name example.com \
 #### Custom Chain Certificate Name:
 
 ```bash
-python3 netscaler-certbot-hook.py --name example.com --chain my-chain
+netscaler-certbot-hook --name example.com --chain my-chain
 ```
 
 #### Verbose Output for Debugging:
 
 ```bash
 # Enable detailed DEBUG logging
-python3 netscaler-certbot-hook.py --name example.com --verbose
+netscaler-certbot-hook --name example.com --verbose
 ```
 
 #### Quiet Mode for Cron Jobs:
 
 ```bash
 # Suppress all output except errors
-python3 netscaler-certbot-hook.py --name example.com --quiet
+netscaler-certbot-hook --name example.com --quiet
 ```
 
 #### Update Chain Certificate:
@@ -168,7 +180,7 @@ When trust chains change (e.g., Let's Encrypt root certificate updates), use the
 
 ```bash
 # Allow chain certificate updates when serial differs
-python3 netscaler-certbot-hook.py --name example.com --update-chain
+netscaler-certbot-hook --name example.com --update-chain
 ```
 
 **Note:** By default, the script will refuse to update chain certificates if the serial number differs. This is a security measure to prevent unexpected trust chain changes. Use `--update-chain` only when you are certain the new chain certificate is valid and expected.
@@ -179,7 +191,7 @@ Add to your crontab for automatic renewal:
 
 ```bash
 # Renew certificates daily and update NetScaler
-0 3 * * * certbot renew --quiet && /usr/bin/python3 /path/to/netscaler-certbot-hook.py --name example.com
+0 3 * * * certbot renew --quiet && netscaler-certbot-hook --name example.com
 ```
 
 Or create a Certbot deploy hook:
@@ -191,7 +203,7 @@ export NS_URL=https://192.168.10.10
 export NS_LOGIN=nsroot
 export NS_PASSWORD=your-password
 
-python3 /path/to/netscaler-certbot-hook.py --name $RENEWED_DOMAINS
+netscaler-certbot-hook --name $RENEWED_DOMAINS
 ```
 
 Make it executable:
@@ -215,13 +227,13 @@ The script uses Python's built-in logging framework for structured output. You c
 
 **Standard Output (INFO level):**
 ```bash
-python3 netscaler-certbot-hook.py --name example.com
+netscaler-certbot-hook --name example.com
 ```
 Shows all important operations and their status.
 
 **Verbose Mode (DEBUG level):**
 ```bash
-python3 netscaler-certbot-hook.py --name example.com --verbose
+netscaler-certbot-hook --name example.com --verbose
 ```
 Shows additional debugging information including:
 - Connection details
@@ -230,7 +242,7 @@ Shows additional debugging information including:
 
 **Quiet Mode (ERROR level):**
 ```bash
-python3 netscaler-certbot-hook.py --name example.com --quiet
+netscaler-certbot-hook --name example.com --quiet
 ```
 Only shows errors. Perfect for cron jobs where you only want to be notified of failures.
 
@@ -240,14 +252,14 @@ For automated cron jobs, use `--quiet` to suppress normal output:
 
 ```bash
 # Only log errors to file
-0 3 * * * python3 /path/to/netscaler-certbot-hook.py --name example.com --quiet 2>> /var/log/netscaler-cert-errors.log
+0 3 * * * netscaler-certbot-hook --name example.com --quiet 2>> /var/log/netscaler-cert-errors.log
 ```
 
 Or use standard output with log rotation:
 
 ```bash
 # Log all output with rotation
-0 3 * * * python3 /path/to/netscaler-certbot-hook.py --name example.com >> /var/log/netscaler-cert.log 2>&1
+0 3 * * * netscaler-certbot-hook --name example.com >> /var/log/netscaler-cert.log 2>&1
 ```
 
 ## Example Output
@@ -304,7 +316,7 @@ By default, the script does **not** automatically update chain certificates if t
 **To enable chain certificate updates**, use the `--update-chain` flag:
 
 ```bash
-python3 netscaler-certbot-hook.py --name example.com --update-chain
+netscaler-certbot-hook --name example.com --update-chain
 ```
 
 **When to use `--update-chain`:**

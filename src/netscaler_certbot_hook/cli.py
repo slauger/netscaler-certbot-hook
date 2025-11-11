@@ -55,7 +55,7 @@ import urllib.parse
 import logging
 from typing import Dict, Optional, Union, Any
 from OpenSSL import crypto
-import nitro
+from . import nitro
 
 # Initialize logger
 logger = logging.getLogger(__name__)
