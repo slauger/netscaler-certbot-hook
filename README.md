@@ -92,6 +92,7 @@ python3 netscaler-certbot-hook.py --help
 | `--chain-cert` | No | `/etc/letsencrypt/live/<name>/chain.pem` | Path to chain certificate file |
 | `--verbose` | No | `false` | Enable verbose output (DEBUG level) |
 | `--quiet` | No | `false` | Suppress all output except errors |
+| `--update-chain` | No | `false` | Allow updating chain certificate if serial differs |
 
 ## Usage
 
@@ -160,6 +161,17 @@ python3 netscaler-certbot-hook.py --name example.com --verbose
 # Suppress all output except errors
 python3 netscaler-certbot-hook.py --name example.com --quiet
 ```
+
+#### Update Chain Certificate:
+
+When trust chains change (e.g., Let's Encrypt root certificate updates), use the `--update-chain` flag to allow automatic chain certificate updates:
+
+```bash
+# Allow chain certificate updates when serial differs
+python3 netscaler-certbot-hook.py --name example.com --update-chain
+```
+
+**Note:** By default, the script will refuse to update chain certificates if the serial number differs. This is a security measure to prevent unexpected trust chain changes. Use `--update-chain` only when you are certain the new chain certificate is valid and expected.
 
 ### Step 3: Automate with Cron
 
@@ -287,7 +299,20 @@ installed certificate matches our serial - nothing to do
 
 ### Chain Certificate Updates
 
-For security reasons, the script does **not** automatically update chain certificates if the serial number differs. This prevents potential security issues from unexpected chain updates. Manual intervention is required if you need to update a chain certificate.
+By default, the script does **not** automatically update chain certificates if the serial number differs. This prevents potential security issues from unexpected chain updates.
+
+**To enable chain certificate updates**, use the `--update-chain` flag:
+
+```bash
+python3 netscaler-certbot-hook.py --name example.com --update-chain
+```
+
+**When to use `--update-chain`:**
+- Let's Encrypt root certificate rotation
+- CA intermediate certificate updates
+- Planned trust chain migrations
+
+**Security Warning:** Only use `--update-chain` when you are expecting a chain certificate change and have verified the new certificate is valid. Unexpected chain changes could indicate a security issue.
 
 ### Credential Management
 

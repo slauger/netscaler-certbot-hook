@@ -108,6 +108,12 @@ add_args = {
     'default': False,
     'required': False,
   },
+  '--update-chain': {
+    'help': 'allow updating chain certificate if serial differs',
+    'action': 'store_true',
+    'default': False,
+    'required': False,
+  },
 }
 
 def add_argument(parser: argparse.ArgumentParser, arg: str, params: Dict[str, Any]) -> None:
@@ -350,6 +356,7 @@ def get_config(args: argparse.Namespace) -> Dict[str, Union[str, bool, int]]:
             - chain_file (str): Path to chain certificate file
             - cert_name (str): Certificate object name
             - chain_name (str): Chain certificate object name
+            - update_chain (bool): Whether to allow chain certificate updates
             - timestamp (int): Unix timestamp for file naming
 
     Raises:
@@ -371,6 +378,7 @@ def get_config(args: argparse.Namespace) -> Dict[str, Union[str, bool, int]]:
         'chain_file': args.chain_cert or '/etc/letsencrypt/live/{}/chain.pem'.format(args.name),
         'cert_name': args.name,
         'chain_name': args.chain,
+        'update_chain': args.update_chain,
         'timestamp': int(time.time()),
     }
 
@@ -434,19 +442,21 @@ def process_chain_certificate(nitro_client: nitro.NitroClient, config: Dict[str,
 
     Checks if the chain certificate exists on the NetScaler. If it exists and matches
     the local serial number, no action is taken. If it doesn't exist, uploads and
-    installs the chain certificate.
+    installs the chain certificate. If the serial differs and --update-chain flag is set,
+    updates the chain certificate.
 
     Args:
         nitro_client (NitroClient): Configured NITRO API client instance.
         config (dict): Configuration dictionary from get_config().
 
     Raises:
-        Exception: If installed chain certificate serial doesn't match local certificate.
-                  Chain certificates should not be updated for security reasons.
+        Exception: If installed chain certificate serial doesn't match local certificate
+                  and --update-chain flag is NOT set.
 
     Note:
-        For security reasons, this function does NOT update existing chain certificates
-        if the serial number differs. Manual intervention is required in such cases.
+        By default, this function does NOT update existing chain certificates if the
+        serial number differs. Use --update-chain flag to enable chain certificate updates.
+        This is disabled by default for security reasons to prevent unexpected chain changes.
     """
     chain_serial = get_certificate_serial(config['chain_file'])
     check_chain = nitro_check_cert(nitro_client, config['chain_name'])
@@ -458,7 +468,16 @@ def process_chain_certificate(nitro_client: nitro.NitroClient, config: Dict[str,
         if installed_serial == chain_serial:
             logger.info("installed chain certificate matches our serial - nothing to do")
         else:
-            raise Exception('serial of installed chain certificate does not match our serial')
+            if config['update_chain']:
+                logger.warning("chain certificate serial differs - updating due to --update-chain flag")
+                logger.info("old serial: %s, new serial: %s", installed_serial, chain_serial)
+                chain_filename = '{}-{}.crt'.format(config['chain_name'], config['timestamp'])
+                logger.info("uploading chain certificate as %s", chain_filename)
+                nitro_upload(nitro_client, config['chain_file'], chain_filename)
+                logger.info("updating chain certificate with serial %s", chain_serial)
+                nitro_install_cert(nitro_client, config['chain_name'], cert=chain_filename, update=True)
+            else:
+                raise Exception('serial of installed chain certificate does not match our serial (use --update-chain to allow updates)')
     else:
         logger.info("chain certificate %s not found", config['chain_name'])
         chain_filename = '{}-{}.crt'.format(config['chain_name'], config['timestamp'])

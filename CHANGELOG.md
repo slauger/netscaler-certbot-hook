@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `--update-chain` flag to allow chain certificate updates when serial differs
+- WARNING log message when chain certificate is being updated
+- Information log showing old and new serial numbers during chain update
+
+### Changed
+- `process_chain_certificate()` now supports updating chain certificates when `--update-chain` flag is set
+- Error message now suggests using `--update-chain` when chain serial mismatch occurs
+- Updated security documentation to explain when to use `--update-chain`
+
+### Security
+- Chain certificate updates remain disabled by default for security
+- Users must explicitly opt-in with `--update-chain` flag
+- Added security warnings in documentation about chain certificate updates
+
 ## [1.0.0] - 2025-01-11
 
 ### Major Refactoring - Production Ready Release
