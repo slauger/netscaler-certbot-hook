@@ -349,87 +349,14 @@ export NS_VERIFY_SSL=true
 
 Only disable for testing or development environments.
 
-## Troubleshooting
-
-### Common Issues
-
-#### "required environment variable NS_URL not set"
-
-**Solution:** Set the required environment variable:
-```bash
-export NS_URL=https://your-netscaler-ip
-```
-
-#### "Certificate file not found"
-
-**Solution:** Verify certificate path or let the script use default paths:
-```bash
-ls /etc/letsencrypt/live/example.com/
-```
-
-#### "Failed to connect to NetScaler"
-
-**Possible causes:**
-- NetScaler is not reachable (check network/firewall)
-- Wrong IP address or URL
-- SSL verification issues
-
-**Solution:**
-```bash
-# Test connectivity
-ping your-netscaler-ip
-
-# Temporary disable SSL verification for testing
-export NS_VERIFY_SSL=false
-```
-
-#### "HTTP error from NetScaler: 401"
-
-**Solution:** Check credentials:
-```bash
-export NS_LOGIN=correct-username
-export NS_PASSWORD=correct-password
-```
-
-#### "serial of installed chain certificate does not match"
-
-**Solution:** Chain certificates cannot be auto-updated. Manually update or contact administrator.
-
-### Debug Mode
-
-For detailed output, check the Python script directly or examine NetScaler logs.
-
-### Exit Codes
-
-- `0` - Success (certificate installed, updated, or already current)
-- `1` - Error (configuration, validation, or API error)
-
 ## API Reference
 
 The script uses the Citrix NetScaler NITRO API. For more information:
 - [NetScaler NITRO API Documentation](https://docs.citrix.com/en-us/citrix-adc/current-release/nitro-api.html)
 
-## Development
+## Contributing
 
-### Running Tests
-
-Currently, the project focuses on production use. Unit tests are planned for future releases.
-
-### Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-### Code Quality
-
-The codebase follows:
-- PEP 8 style guidelines
-- Type hints throughout
-- Comprehensive docstrings
-- Professional error handling
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines on contributing to this project
 
 ## License
 
@@ -439,16 +366,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Simon Lauger** - [@slauger](https://github.com/slauger)
 
-## Acknowledgments
-
-- Citrix for the NetScaler NITRO API
-- Let's Encrypt for free SSL certificates
-- The Certbot team for excellent automation tools
-
 ## Support
 
-For issues, questions, or contributions, please use the [GitHub issue tracker](https://github.com/slauger/netscaler-certbot-hook/issues).
-
----
-
-**Made with ❤️ for automated certificate management**
+For issues, questions, or contributions, please use the [GitHub issue tracker](https://github.com/slauger/netscaler-certbot-hook/issues)
