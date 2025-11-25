@@ -1,6 +1,121 @@
 # CHANGELOG
 
+## v2.0.0 (2025-11-25)
+
+### Breaking
+
+* feat!: implement 31-char limit for chain names with hash suffix
+
+Chain certificate names are now limited to 31 characters (NetScaler limit)
+and use hash suffixes for uniqueness when names exceed this limit.
+
+Changes:
+- Names &gt; 31 chars: truncated to 24 chars + hyphen + 6-char SHA256 hash
+- Names &lt;= 31 chars: preserved as-is
+- Hash ensures uniqueness (e.g., GoDaddy G2 vs G3 have different hashes)
+- Apostrophes are removed completely instead of replaced
+
+Examples:
+- &#34;R11&#34; → &#34;R11&#34; (unchanged)
+- &#34;ZeroSSL RSA Domain Secure Site CA&#34; → &#34;ZeroSSL RSA Domain Secur-f38a3d&#34;
+- &#34;Go Daddy Secure Certificate Authority - G2&#34; → &#34;Go Daddy Secure Certific-68a0d1&#34;
+- &#34;Go Daddy Secure Certificate Authority - G3&#34; → &#34;Go Daddy Secure Certific-499691&#34;
+
+BREAKING CHANGE: Chain certificate auto-detection now uses the certificate&#39;s
+Common Name (CN) instead of the hardcoded &#34;letsencrypt&#34; default. Existing
+deployments must either:
+1. Explicitly specify --chain letsencrypt to maintain old behavior
+2. Delete/rename the old &#34;letsencrypt&#34; chain certificate on NetScaler
+Otherwise, certificate installation will fail because NetScaler only allows
+one instance of each CA certificate. ([`3c408ef`](https://github.com/slauger/netscaler-certbot-hook/commit/3c408efd5f18085dbd75053b61dc86ac0e413f37))
+
+### Feature
+
+* feat: add noDomainCheck flag and auto-detect chain certificate name
+
+This commit adds two major improvements to handle chain certificate updates:
+
+1. **New --no-domain-check flag**: Adds explicit control over the NITRO API&#39;s
+   noDomainCheck parameter. This is required when updating chain certificates
+   because they are registered to different domains (CA domains) than the
+   end-entity certificate. The flag can be used for:
+   - Chain certificate updates (required)
+   - Multi-domain/SAN certificates
+   - Certificates bound to multiple virtual servers
+   - Any scenario triggering &#34;Certificate is registered to a different domain&#34; error
+
+2. **Auto-detect chain certificate name**: The chain certificate name is now
+   automatically detected from the Common Name (CN) in the certificate, instead
+   of using a hardcoded &#34;letsencrypt&#34; default. This automatically adapts to
+   Let&#39;s Encrypt issuer changes (e.g., R10, R11, E5, E6, E7, E8). Users can
+   still override with --chain if needed.
+
+Changes:
+- Added --no-domain-check CLI parameter
+- Added get_certificate_cn() function to extract CN from certificates
+- Modified nitro_install_cert() to accept no_domain_check parameter
+- Auto-detect chain name from certificate CN in get_config()
+- Updated README.md with comprehensive documentation
+- Updated process_chain_certificate() to use config[&#39;no_domain_check&#39;]
+- Updated install_or_update_certificate() to use config[&#39;no_domain_check&#39;]
+
+Fixes #10 ([`7fb9c3d`](https://github.com/slauger/netscaler-certbot-hook/commit/7fb9c3d0101ccf4849fae52117949e8cc571f78c))
+
+### Fix
+
+* fix: install package in editable mode for GitHub Actions tests
+
+This ensures the netscaler_certbot_hook module can be imported in CI/CD. ([`2c1603c`](https://github.com/slauger/netscaler-certbot-hook/commit/2c1603c02664c3596896b9c0090b839579a0d44e))
+
+### Test
+
+* test: add comprehensive tests for certificate CN extraction
+
+This commit adds extensive test coverage for the certificate CN extraction
+and sanitization functionality:
+
+1. **Unit tests** (tests/test_certificate_cn.py):
+   - Test simple alphanumeric CNs (Let&#39;s Encrypt R10, E5, etc.)
+   - Test CNs with spaces (preserved for readability)
+   - Test CNs with special characters (sanitized to hyphens)
+   - Test valid special characters (underscore, hyphen, space)
+   - Test NetScaler compatibility validation
+   - Test error handling (file not found, invalid certificate)
+   - Test real-world CA naming patterns
+
+2. **CA certificate test script** (test_ca_certificates.py):
+   - Downloads real intermediate certificates from multiple CAs
+   - Tests Let&#39;s Encrypt (R10, R11, E5, E6)
+   - Tests ZeroSSL/Sectigo RSA intermediate
+   - Tests GoDaddy G2 intermediate
+   - Validates sanitized names are NetScaler-compatible
+   - Handles both PEM and DER certificate formats
+
+3. **Sanitization rules** (updated in cli.py):
+   - Conservative whitelist: alphanumeric, underscore, hyphen, space
+   - Explicitly excludes: # : . @ = and other special chars
+   - Apostrophes are removed completely (not replaced)
+   - Must start with alphanumeric or underscore
+   - Preserves spaces for readability (shorter names)
+
+4. **GitHub Actions workflow** (.github/workflows/tests.yml):
+   - Runs tests on Python 3.8-3.12
+   - Executes unit tests and CA certificate tests
+   - Verifies module import
+
+All tests pass successfully! ([`579a30f`](https://github.com/slauger/netscaler-certbot-hook/commit/579a30fc7dc53aa472b8e18cad264f421463ba1a))
+
+### Unknown
+
+* Merge pull request #11 from slauger/fix/10-chain-update-domain-check
+
+feat: add noDomainCheck flag and auto-detect chain certificate name ([`920a6f1`](https://github.com/slauger/netscaler-certbot-hook/commit/920a6f1507b0643792a8912ba860dd4c2106a591))
+
 ## v1.0.3 (2025-11-11)
+
+### Chore
+
+* chore(release): 1.0.3 ([`db8f61e`](https://github.com/slauger/netscaler-certbot-hook/commit/db8f61e97ccd2c16728bfc7768f4471945a66e16))
 
 ### Fix
 
