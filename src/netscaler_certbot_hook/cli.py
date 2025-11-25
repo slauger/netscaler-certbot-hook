@@ -53,6 +53,7 @@ import time
 import base64
 import urllib.parse
 import logging
+import hashlib
 from typing import Dict, Optional, Union, Any
 from OpenSSL import crypto
 from . import nitro
@@ -496,6 +497,7 @@ def get_certificate_cn(cert_file: str) -> str:
         # We allow only: alphanumeric, underscore, hyphen, space
         # (NetScaler technically allows more, but we keep it conservative)
         # Must start with alphanumeric or underscore
+        # Maximum length: 31 characters (NetScaler limit)
         allowed_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ')
         # Remove apostrophes completely, replace other invalid chars with hyphen
         sanitized_cn = ''.join(c if c in allowed_chars else ('' if c == "'" else '-') for c in cn)
@@ -503,6 +505,14 @@ def get_certificate_cn(cert_file: str) -> str:
         # Ensure it starts with alphanumeric or underscore
         if sanitized_cn and not (sanitized_cn[0].isalnum() or sanitized_cn[0] == '_'):
             sanitized_cn = '_' + sanitized_cn
+
+        # Handle names longer than 31 characters (NetScaler limit)
+        if len(sanitized_cn) > 31:
+            # Generate hash from original CN to ensure uniqueness
+            cn_hash = hashlib.sha256(cn.encode('utf-8')).hexdigest()[:6]
+            # Take first 24 chars + hyphen + 6 char hash = 31 chars total
+            sanitized_cn = sanitized_cn[:24] + '-' + cn_hash
+            logger.debug("Chain certificate name truncated with hash suffix: %s (from: %s)", sanitized_cn, cn)
 
         return sanitized_cn
     except (IOError, OSError) as e:

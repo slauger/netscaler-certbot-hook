@@ -67,20 +67,39 @@ class TestCertificateCN(unittest.TestCase):
 
     def test_cn_with_spaces(self):
         """Test CNs with spaces are preserved (NetScaler allows spaces)."""
-        test_cases = [
-            ('ZeroSSL RSA Domain Secure Site CA', 'ZeroSSL RSA Domain Secure Site CA'),
-            ('Go Daddy Secure Certificate Authority - G2', 'Go Daddy Secure Certificate Authority - G2'),
-            ('Let\'s Encrypt Authority X3', 'Lets Encrypt Authority X3'),  # Apostrophe removed
-        ]
+        import hashlib
 
-        for input_cn, expected in test_cases:
-            with self.subTest(cn=input_cn):
-                cert_file = self.create_test_cert(input_cn)
-                try:
-                    result = get_certificate_cn(cert_file)
-                    self.assertEqual(result, expected)
-                finally:
-                    os.unlink(cert_file)
+        # Short name - spaces preserved
+        short_cn = 'Lets Encrypt Authority X3'  # Apostrophe removed, 25 chars
+        cert_file = self.create_test_cert(short_cn)
+        try:
+            result = get_certificate_cn(cert_file)
+            self.assertEqual(result, short_cn)
+        finally:
+            os.unlink(cert_file)
+
+        # Long names - get hash suffix
+        long_cn1 = 'ZeroSSL RSA Domain Secure Site CA'  # 33 chars
+        cert_file1 = self.create_test_cert(long_cn1)
+        try:
+            result1 = get_certificate_cn(cert_file1)
+            hash1 = hashlib.sha256(long_cn1.encode('utf-8')).hexdigest()[:6]
+            expected1 = f'ZeroSSL RSA Domain Secur-{hash1}'
+            self.assertEqual(result1, expected1)
+            self.assertEqual(len(result1), 31)
+        finally:
+            os.unlink(cert_file1)
+
+        long_cn2 = 'Go Daddy Secure Certificate Authority - G2'  # 42 chars
+        cert_file2 = self.create_test_cert(long_cn2)
+        try:
+            result2 = get_certificate_cn(cert_file2)
+            hash2 = hashlib.sha256(long_cn2.encode('utf-8')).hexdigest()[:6]
+            expected2 = f'Go Daddy Secure Certific-{hash2}'
+            self.assertEqual(result2, expected2)
+            self.assertEqual(len(result2), 31)
+        finally:
+            os.unlink(cert_file2)
 
     def test_cn_with_invalid_special_characters(self):
         """Test CNs with invalid special characters are sanitized."""
@@ -125,14 +144,44 @@ class TestCertificateCN(unittest.TestCase):
                     os.unlink(cert_file)
 
     def test_cn_length(self):
-        """Test that long CNs are preserved (no truncation)."""
-        # Test a moderately long CN (64 chars - OpenSSL limit is typically 64)
-        long_cn = 'A' * 64
+        """Test that long CNs are truncated to 31 characters with hash suffix."""
+        # Test a moderately long CN (40 chars)
+        import hashlib
+        long_cn = 'A' * 40
         cert_file = self.create_test_cert(long_cn)
         try:
             result = get_certificate_cn(cert_file)
-            self.assertEqual(result, long_cn)
-            self.assertEqual(len(result), 64)
+            # Should be truncated to 31 chars: first 24 + hyphen + 6 char hash
+            self.assertEqual(len(result), 31)
+            # Verify format: 24 chars + '-' + 6 char hash
+            self.assertEqual(result[:24], 'A' * 24)
+            self.assertEqual(result[24], '-')
+            self.assertEqual(len(result[25:]), 6)
+            # Hash should be deterministic
+            expected_hash = hashlib.sha256(long_cn.encode('utf-8')).hexdigest()[:6]
+            self.assertEqual(result[25:], expected_hash)
+        finally:
+            os.unlink(cert_file)
+
+    def test_cn_exactly_31_chars(self):
+        """Test that CNs with exactly 31 characters are not truncated."""
+        cn_31 = 'A' * 31
+        cert_file = self.create_test_cert(cn_31)
+        try:
+            result = get_certificate_cn(cert_file)
+            self.assertEqual(len(result), 31)
+            self.assertEqual(result, cn_31)
+        finally:
+            os.unlink(cert_file)
+
+    def test_cn_under_31_chars(self):
+        """Test that CNs under 31 characters are preserved."""
+        cn_short = 'Short Name'
+        cert_file = self.create_test_cert(cn_short)
+        try:
+            result = get_certificate_cn(cert_file)
+            self.assertEqual(result, cn_short)
+            self.assertEqual(len(result), 10)
         finally:
             os.unlink(cert_file)
 
@@ -215,29 +264,46 @@ class TestCertificateCNRealWorld(unittest.TestCase):
 
     def test_zerossl_pattern(self):
         """Test ZeroSSL naming pattern."""
+        import hashlib
         cn = 'ZeroSSL RSA Domain Secure Site CA'
-        expected = 'ZeroSSL RSA Domain Secure Site CA'  # Spaces are preserved
+        expected_hash = hashlib.sha256(cn.encode('utf-8')).hexdigest()[:6]
+        expected = f'ZeroSSL RSA Domain Secur-{expected_hash}'  # 24 chars + hyphen + 6 char hash
 
-        # Check length
-        self.assertEqual(len(expected), 33)
-        # Check it's within reasonable bounds (< 128 chars)
-        self.assertLess(len(expected), 128)
+        # Check length - should be 31
+        self.assertEqual(len(expected), 31)
         # Check no invalid characters
         valid_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ')
         self.assertEqual(set(expected) - valid_chars, set())
 
     def test_godaddy_pattern(self):
         """Test GoDaddy naming pattern."""
+        import hashlib
         cn = 'Go Daddy Secure Certificate Authority - G2'
-        expected = 'Go Daddy Secure Certificate Authority - G2'  # Spaces are preserved
+        expected_hash = hashlib.sha256(cn.encode('utf-8')).hexdigest()[:6]
+        expected = f'Go Daddy Secure Certific-{expected_hash}'  # 24 chars + hyphen + 6 char hash
 
-        # Check length
-        self.assertEqual(len(expected), 42)
-        # Check it's within reasonable bounds (< 128 chars)
-        self.assertLess(len(expected), 128)
+        # Check length - should be 31
+        self.assertEqual(len(expected), 31)
         # Check no invalid characters
         valid_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ')
         self.assertEqual(set(expected) - valid_chars, set())
+
+    def test_hash_uniqueness(self):
+        """Test that different CNs produce different hashes."""
+        import hashlib
+        cn_g2 = 'Go Daddy Secure Certificate Authority - G2'
+        cn_g3 = 'Go Daddy Secure Certificate Authority - G3'
+
+        hash_g2 = hashlib.sha256(cn_g2.encode('utf-8')).hexdigest()[:6]
+        hash_g3 = hashlib.sha256(cn_g3.encode('utf-8')).hexdigest()[:6]
+
+        # Both start with same 24 chars but different hashes
+        expected_g2 = f'Go Daddy Secure Certific-{hash_g2}'
+        expected_g3 = f'Go Daddy Secure Certific-{hash_g3}'
+
+        # Must be different!
+        self.assertNotEqual(expected_g2, expected_g3)
+        self.assertNotEqual(hash_g2, hash_g3)
 
 
 if __name__ == '__main__':

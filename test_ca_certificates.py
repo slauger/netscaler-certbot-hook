@@ -126,11 +126,10 @@ def validate_netscaler_name(name):
         warnings.append(f"Invalid chars: {set(invalid_chars)}")
         is_valid = False
 
-    # Warn about length (informational only, no hard limit in NetScaler)
-    if len(name) > 64:
-        warnings.append(f"Very long name ({len(name)} chars)")
-    elif len(name) > 40:
-        warnings.append(f"Long name ({len(name)} chars)")
+    # Check maximum length (NetScaler limit for certificate names is 31 chars)
+    if len(name) > 31:
+        warnings.append(f"Name too long ({len(name)} chars, max 31)")
+        is_valid = False
 
     return is_valid, warnings
 
