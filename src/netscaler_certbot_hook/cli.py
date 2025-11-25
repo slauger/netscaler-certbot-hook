@@ -493,8 +493,16 @@ def get_certificate_cn(cert_file: str) -> str:
             raise ValueError("No Common Name (CN) found in certificate")
 
         # Sanitize CN for use as NetScaler object name
-        # Remove spaces, special characters, keep alphanumeric and basic punctuation
-        sanitized_cn = ''.join(c if c.isalnum() or c in '-_.' else '-' for c in cn)
+        # We allow only: alphanumeric, underscore, hyphen, space
+        # (NetScaler technically allows more, but we keep it conservative)
+        # Must start with alphanumeric or underscore
+        allowed_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ')
+        # Remove apostrophes completely, replace other invalid chars with hyphen
+        sanitized_cn = ''.join(c if c in allowed_chars else ('' if c == "'" else '-') for c in cn)
+
+        # Ensure it starts with alphanumeric or underscore
+        if sanitized_cn and not (sanitized_cn[0].isalnum() or sanitized_cn[0] == '_'):
+            sanitized_cn = '_' + sanitized_cn
 
         return sanitized_cn
     except (IOError, OSError) as e:
