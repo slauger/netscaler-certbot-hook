@@ -53,6 +53,7 @@ import time
 import base64
 import urllib.parse
 import logging
+import hashlib
 from typing import Dict, Optional, Union, Any
 from OpenSSL import crypto
 from . import nitro
@@ -110,6 +111,12 @@ add_args = {
   },
   '--update-chain': {
     'help': 'allow updating chain certificate if serial differs',
+    'action': 'store_true',
+    'default': False,
+    'required': False,
+  },
+  '--no-domain-check': {
+    'help': 'skip domain validation when updating certificates (required for chain updates and multi-domain certificates)',
     'action': 'store_true',
     'default': False,
     'required': False,
@@ -218,7 +225,7 @@ def nitro_delete(nitro_client: nitro.NitroClient, filename: str) -> Dict[str, An
 
 
 def nitro_install_cert(nitro_client: nitro.NitroClient, name: str, cert: Optional[str] = None,
-                       key: Optional[str] = None, update: bool = False) -> Dict[str, Any]:
+                       key: Optional[str] = None, update: bool = False, no_domain_check: bool = False) -> Dict[str, Any]:
     """Install or update a certificate on the NetScaler.
 
     Args:
@@ -227,6 +234,7 @@ def nitro_install_cert(nitro_client: nitro.NitroClient, name: str, cert: Optiona
         cert (str, optional): Certificate filename on NetScaler. Defaults to None.
         key (str, optional): Private key filename on NetScaler. Defaults to None.
         update (bool, optional): True to update existing cert, False to create new. Defaults to False.
+        no_domain_check (bool, optional): Skip domain check when updating certificate. Defaults to False.
 
     Returns:
         dict: API response from the installation/update operation.
@@ -249,6 +257,8 @@ def nitro_install_cert(nitro_client: nitro.NitroClient, name: str, cert: Optiona
         data['sslcertkey']['cert'] = "/nsconfig/ssl/{}".format(cert)
     if key:
         data['sslcertkey']['key'] = "/nsconfig/ssl/{}".format(key)
+    if no_domain_check:
+        data['sslcertkey']['nodomaincheck'] = True
 
     return nitro_client.request(
         'post',
@@ -357,6 +367,7 @@ def get_config(args: argparse.Namespace) -> Dict[str, Union[str, bool, int]]:
             - cert_name (str): Certificate object name
             - chain_name (str): Chain certificate object name
             - update_chain (bool): Whether to allow chain certificate updates
+            - no_domain_check (bool): Whether to skip domain validation during updates
             - timestamp (int): Unix timestamp for file naming
 
     Raises:
@@ -379,6 +390,7 @@ def get_config(args: argparse.Namespace) -> Dict[str, Union[str, bool, int]]:
         'cert_name': args.name,
         'chain_name': args.chain,
         'update_chain': args.update_chain,
+        'no_domain_check': args.no_domain_check,
         'timestamp': int(time.time()),
     }
 
@@ -401,6 +413,16 @@ def get_config(args: argparse.Namespace) -> Dict[str, Union[str, bool, int]]:
                                  ('chain_file', config['chain_file'])]:
         if not os.path.isfile(file_path):
             raise FileNotFoundError('{} not found: {}'.format(file_key, file_path))
+
+    # If chain name is default 'letsencrypt', try to auto-detect from chain certificate CN
+    if config['chain_name'] == 'letsencrypt':
+        try:
+            chain_cn = get_certificate_cn(config['chain_file'])
+            config['chain_name'] = chain_cn
+            logger.debug("Auto-detected chain certificate name from CN: %s", chain_cn)
+        except Exception as e:
+            # If CN extraction fails, keep the default 'letsencrypt'
+            logger.debug("Could not auto-detect chain name from CN (%s), using default: %s", str(e), config['chain_name'])
 
     return config
 
@@ -435,6 +457,70 @@ def get_certificate_serial(cert_file: str) -> int:
         raise IOError("Failed to read certificate file {}: {}".format(cert_file, str(e)))
     except crypto.Error as e:
         raise ValueError("Invalid certificate format in {}: {}".format(cert_file, str(e)))
+
+
+def get_certificate_cn(cert_file: str) -> str:
+    """Extract Common Name (CN) from a PEM certificate file.
+
+    Args:
+        cert_file (str): Path to the PEM-encoded certificate file.
+
+    Returns:
+        str: Certificate Common Name (CN), sanitized for use as NetScaler object name.
+
+    Raises:
+        FileNotFoundError: If certificate file does not exist.
+        IOError: If certificate file cannot be read.
+        ValueError: If certificate format is invalid or CN not found.
+
+    Example:
+        >>> cn = get_certificate_cn('/etc/letsencrypt/live/mydomain.com/chain.pem')
+        >>> print(cn)
+        'R11'
+    """
+    if not os.path.isfile(cert_file):
+        raise FileNotFoundError("Certificate file not found: {}".format(cert_file))
+
+    try:
+        with open(cert_file, 'r') as f:
+            cert_data = f.read()
+        cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_data)
+
+        # Get subject and extract CN
+        subject = cert.get_subject()
+        cn = subject.CN
+
+        if not cn:
+            raise ValueError("No Common Name (CN) found in certificate")
+
+        # Sanitize CN for use as NetScaler object name
+        # We allow only: alphanumeric, underscore, hyphen, space
+        # (NetScaler technically allows more, but we keep it conservative)
+        # Must start with alphanumeric or underscore
+        # Maximum length: 31 characters (NetScaler limit)
+        allowed_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ')
+        # Remove apostrophes completely, replace other invalid chars with hyphen
+        sanitized_cn = ''.join(c if c in allowed_chars else ('' if c == "'" else '-') for c in cn)
+
+        # Ensure it starts with alphanumeric or underscore
+        if sanitized_cn and not (sanitized_cn[0].isalnum() or sanitized_cn[0] == '_'):
+            sanitized_cn = '_' + sanitized_cn
+
+        # Handle names longer than 31 characters (NetScaler limit)
+        if len(sanitized_cn) > 31:
+            # Generate hash from original CN to ensure uniqueness
+            cn_hash = hashlib.sha256(cn.encode('utf-8')).hexdigest()[:6]
+            # Take first 24 chars + hyphen + 6 char hash = 31 chars total
+            sanitized_cn = sanitized_cn[:24] + '-' + cn_hash
+            logger.debug("Chain certificate name truncated with hash suffix: %s (from: %s)", sanitized_cn, cn)
+
+        return sanitized_cn
+    except (IOError, OSError) as e:
+        raise IOError("Failed to read certificate file {}: {}".format(cert_file, str(e)))
+    except crypto.Error as e:
+        raise ValueError("Invalid certificate format in {}: {}".format(cert_file, str(e)))
+    except AttributeError:
+        raise ValueError("Could not extract Common Name from certificate in {}".format(cert_file))
 
 
 def process_chain_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Union[str, bool, int]]) -> None:
@@ -475,7 +561,7 @@ def process_chain_certificate(nitro_client: nitro.NitroClient, config: Dict[str,
                 logger.info("uploading chain certificate as %s", chain_filename)
                 nitro_upload(nitro_client, config['chain_file'], chain_filename)
                 logger.info("updating chain certificate with serial %s", chain_serial)
-                nitro_install_cert(nitro_client, config['chain_name'], cert=chain_filename, update=True)
+                nitro_install_cert(nitro_client, config['chain_name'], cert=chain_filename, update=True, no_domain_check=config['no_domain_check'])
             else:
                 raise Exception('serial of installed chain certificate does not match our serial (use --update-chain to allow updates)')
     else:
@@ -518,7 +604,7 @@ def install_or_update_certificate(nitro_client: nitro.NitroClient, config: Dict[
     else:
         logger.info("installing certificate with serial %s", cert_serial)
 
-    nitro_install_cert(nitro_client, config['cert_name'], cert=cert_filename, key=key_filename, update=update)
+    nitro_install_cert(nitro_client, config['cert_name'], cert=cert_filename, key=key_filename, update=update, no_domain_check=config['no_domain_check'])
 
     logger.info("link certificate %s to chain certificate %s", config['cert_name'], config['chain_name'])
     try:
