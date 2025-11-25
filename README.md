@@ -98,13 +98,14 @@ netscaler-certbot-hook --help
 | Argument | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `--name` | Yes | - | Certificate object name on NetScaler |
-| `--chain` | No | `letsencrypt` | Chain certificate object name |
+| `--chain` | No | Auto-detected from CN | Chain certificate object name (auto-detected from certificate CN if not specified) |
 | `--cert` | No | `/etc/letsencrypt/live/<name>/cert.pem` | Path to certificate file |
 | `--privkey` | No | `/etc/letsencrypt/live/<name>/privkey.pem` | Path to private key file |
 | `--chain-cert` | No | `/etc/letsencrypt/live/<name>/chain.pem` | Path to chain certificate file |
 | `--verbose` | No | `false` | Enable verbose output (DEBUG level) |
 | `--quiet` | No | `false` | Suppress all output except errors |
 | `--update-chain` | No | `false` | Allow updating chain certificate if serial differs |
+| `--no-domain-check` | No | `false` | Skip domain validation when updating certificates |
 
 ## Usage
 
@@ -154,10 +155,22 @@ netscaler-certbot-hook --name example.com \
   --chain-cert /path/to/chain.pem
 ```
 
-#### Custom Chain Certificate Name:
+#### Automatic Chain Certificate Naming:
+
+By default, the script automatically detects the chain certificate name from the Common Name (CN) in the certificate. For example, Let's Encrypt intermediate certificates like "R10", "R11", "E5", "E6" etc. are automatically detected:
 
 ```bash
-netscaler-certbot-hook --name example.com --chain my-chain
+# Chain name is auto-detected from the certificate CN
+netscaler-certbot-hook --name example.com
+# Creates/updates chain certificate with name like "R11" or "E6"
+```
+
+#### Custom Chain Certificate Name:
+
+You can override the auto-detection and specify a custom chain certificate name:
+
+```bash
+netscaler-certbot-hook --name example.com --chain my-custom-chain
 ```
 
 #### Verbose Output for Debugging:
@@ -176,14 +189,34 @@ netscaler-certbot-hook --name example.com --quiet
 
 #### Update Chain Certificate:
 
-When trust chains change (e.g., Let's Encrypt root certificate updates), use the `--update-chain` flag to allow automatic chain certificate updates:
+When trust chains change (e.g., Let's Encrypt issuer switching from E8 to E7), use both `--update-chain` and `--no-domain-check` flags:
 
 ```bash
 # Allow chain certificate updates when serial differs
-netscaler-certbot-hook --name example.com --update-chain
+netscaler-certbot-hook --name example.com --update-chain --no-domain-check
 ```
 
 **Note:** By default, the script will refuse to update chain certificates if the serial number differs. This is a security measure to prevent unexpected trust chain changes. Use `--update-chain` only when you are certain the new chain certificate is valid and expected.
+
+**Why `--no-domain-check` is required:** Chain certificates (intermediate CAs) are registered to different domains than your end-entity certificate. Without this flag, NetScaler will reject the update with the error: "Certificate is registered to a different domain; use the 'no domain check' option to force the operation".
+
+#### Skip Domain Validation:
+
+The `--no-domain-check` flag is useful in several scenarios:
+
+```bash
+# Update certificate with domain changes or multi-domain certificates
+netscaler-certbot-hook --name example.com --no-domain-check
+```
+
+**When to use `--no-domain-check`:**
+- Updating chain/intermediate certificates (required)
+- Certificates with multiple SANs (Subject Alternative Names)
+- Certificates bound to multiple virtual servers
+- When domain names in the certificate have changed
+- Any scenario where NetScaler reports: "Certificate is registered to a different domain"
+
+**Technical Details:** This flag passes the `nodomaincheck` parameter to the NetScaler NITRO API, which bypasses domain validation during certificate updates.
 
 ### Step 3: Automate with Cron
 
@@ -320,11 +353,44 @@ netscaler-certbot-hook --name example.com --update-chain
 ```
 
 **When to use `--update-chain`:**
+- Let's Encrypt issuer rotation (e.g., switching from E8 to E7)
 - Let's Encrypt root certificate rotation
 - CA intermediate certificate updates
 - Planned trust chain migrations
 
+**Important:** Chain certificate updates typically require both `--update-chain` (to allow the update) and `--no-domain-check` (to bypass domain validation). Example:
+
+```bash
+netscaler-certbot-hook --name example.com --update-chain --no-domain-check
+```
+
 **Security Warning:** Only use `--update-chain` when you are expecting a chain certificate change and have verified the new certificate is valid. Unexpected chain changes could indicate a security issue.
+
+### Skip Domain Validation (`--no-domain-check`)
+
+The `--no-domain-check` flag tells NetScaler to skip domain validation when updating certificates. This is necessary in several scenarios:
+
+**Common use cases:**
+- **Chain certificate updates** (required) - Chain certificates are registered to CA domains, not your domain
+- **Multi-domain certificates** - Certificates with multiple SANs may trigger domain validation errors
+- **Certificate rebinding** - Certificates bound to multiple virtual servers
+- **Domain changes** - When updating certificates with modified domain names
+
+**Error message this solves:**
+```
+ERROR: Certificate is registered to a different domain; use the 'no domain check' option to force the operation
+```
+
+**Example usage:**
+```bash
+# Update chain certificate (both flags required)
+netscaler-certbot-hook --name example.com --update-chain --no-domain-check
+
+# Update regular certificate with domain validation issues
+netscaler-certbot-hook --name example.com --no-domain-check
+```
+
+**Technical Details:** This flag passes the `nodomaincheck` parameter to the NetScaler NITRO API during certificate update operations.
 
 ### Credential Management
 
