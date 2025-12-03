@@ -193,7 +193,10 @@ def add_certificate(cert_data: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
 
     try:
         state.add_certificate(cert_data)
-        logger.info(f"Certificate added: {certkey}")
+        # Get the stored certificate to check if serial was extracted
+        stored_cert = state.get_certificate(certkey)
+        serial_info = f"with serial {stored_cert.get('serial')}" if stored_cert.get('serial') else "without serial"
+        logger.info(f"Certificate added: {certkey} {serial_info}")
         return success_response()
     except ValueError as e:
         if "already exists" in str(e):
@@ -350,7 +353,7 @@ def save_config():
 def upload_file():
     """Upload a file to NetScaler.
 
-    This is a no-op in the mock but returns success to simulate the real API.
+    Stores the base64-encoded file content so certificate serials can be extracted.
     """
     data = request.get_json()
 
@@ -360,8 +363,22 @@ def upload_file():
             "Invalid argument [systemfile]"
         )
 
-    filename = data['systemfile'].get('filename')
-    logger.info(f"POST /nitro/v1/config/systemfile - uploading: {filename}")
+    system_file = data['systemfile']
+    filename = system_file.get('filename')
+    filecontent = system_file.get('filecontent')
+
+    if not filename:
+        return error_response(
+            1094,
+            "Invalid argument [filename]"
+        )
+
+    # Store the file content for later serial extraction
+    if filecontent:
+        state.store_uploaded_file(filename, filecontent)
+        logger.info(f"POST /nitro/v1/config/systemfile - uploaded: {filename} ({len(filecontent)} bytes)")
+    else:
+        logger.info(f"POST /nitro/v1/config/systemfile - uploading: {filename} (no content)")
 
     return success_response()
 
