@@ -21,15 +21,23 @@ from tests.mock_nitro import state
 @pytest.fixture
 def mock_server():
     """Start the mock NITRO API server in a background thread."""
+    import socket
+
     # Reset state before each test
     state.reset_state()
 
     # Configure app for testing
     app.config['TESTING'] = True
 
+    # Find a free port
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(('127.0.0.1', 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
     # Start server in background thread
     server_thread = threading.Thread(
-        target=lambda: app.run(host='127.0.0.1', port=5556, debug=False, use_reloader=False),
+        target=lambda: app.run(host='127.0.0.1', port=port, debug=False, use_reloader=False),
         daemon=True
     )
     server_thread.start()
@@ -37,7 +45,7 @@ def mock_server():
     # Give server time to start
     time.sleep(0.5)
 
-    yield 'http://127.0.0.1:5556'
+    yield f'http://127.0.0.1:{port}'
 
     # Cleanup after test
     state.reset_state()
