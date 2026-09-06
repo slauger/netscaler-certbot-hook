@@ -1,5 +1,204 @@
 # CHANGELOG
 
+## v3.0.0 (2026-09-06)
+
+### Breaking
+
+* fix!: use None as sentinel for --chain auto-detection
+
+Previously the default value letsencrypt doubled as the auto-detect
+trigger, so an explicit --chain letsencrypt could never be used as a
+literal object name and was silently overridden by the CN detection.
+
+The default is now None: without --chain the name is auto-detected
+from the chain certificate CN (falling back to letsencrypt only if
+CN extraction fails), any explicit value is respected as-is.
+
+BREAKING CHANGE: --chain letsencrypt is now taken literally instead
+of triggering CN auto-detection ([`a4025e5`](https://github.com/slauger/netscaler-certbot-hook/commit/a4025e53d4aec196d46909b003dc1390689a586c))
+
+* build!: migrate to pyproject-only dependencies and require Python 3.12+
+
+- remove requirements.txt and requirements-dev.txt, dev tooling now
+  installed via pip install -e .[dev]
+- add ruff, black, mypy and pytest configuration to pyproject.toml
+- add lint job to tests workflow and run pytest with coverage
+- update CI matrices to Python 3.12, 3.13 and 3.14
+
+BREAKING CHANGE: Python &lt; 3.12 is no longer supported ([`2ea6f4f`](https://github.com/slauger/netscaler-certbot-hook/commit/2ea6f4f46d44a2d011fa4dbd469840d06373f7d7))
+
+### Chore
+
+* chore: add renovate configuration (#14) ([`638a30f`](https://github.com/slauger/netscaler-certbot-hook/commit/638a30fcfb8663fba3de1c78c41dbffb8d400473))
+
+### Ci
+
+* ci: run tests workflow on all pull requests
+
+The pull_request branches filter matches the PR base branch, so
+stacked PRs that do not target master never got any CI checks. ([`4597540`](https://github.com/slauger/netscaler-certbot-hook/commit/4597540681818919ed22f7f62b4264c023185035))
+
+* ci: install dev dependencies and use pytest in GitHub Actions
+
+The new integration tests require pytest and other dev dependencies
+(Flask, requests, etc.) which are defined in requirements-dev.txt.
+
+Changes:
+- Install requirements-dev.txt in addition to requirements.txt
+- Use &#39;pytest tests/ -v&#39; instead of &#39;unittest discover&#39;
+- This enables pytest-based tests (test_chain_rotation.py, test_integration.py)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude &lt;noreply@anthropic.com&gt; ([`52f1481`](https://github.com/slauger/netscaler-certbot-hook/commit/52f1481039ea3695c41c1291389d5d4dbdbe064d))
+
+### Documentation
+
+* docs: replace architecture image with Mermaid diagrams (#16)
+
+* docs: replace architecture image with Mermaid diagrams
+
+- flowchart for the overall certificate flow from Let&#39;s Encrypt
+  via Certbot to the NetScaler ADC
+- sequence diagram for the idempotent hook logic including chain
+  handling and serial comparison
+- remove architecture.jpg
+
+* docs: simplify architecture diagrams
+
+- switch overall flow to top-down layout so it no longer overflows
+- replace the sequence diagram with a plain decision flowchart ([`5c3a30e`](https://github.com/slauger/netscaler-certbot-hook/commit/5c3a30eeafe69e4a58b3eeb026f3a7b1b81520f2))
+
+### Feature
+
+* feat: add Mock NITRO API server for testing
+
+Implemented a Flask-based mock of the NetScaler NITRO API to enable
+testing without requiring a real NetScaler appliance.
+
+Features:
+- NITRO authentication with X-NITRO-USER/PASS headers
+- Certificate management endpoints (add, update, get)
+- Chain certificate linking/unlinking
+- Proper error codes and messages matching real NetScaler
+- Issue #12 simulation: Prevents linking to multiple chains
+
+Files added:
+- tests/mock_nitro/server.py: Flask server with all endpoints
+- tests/mock_nitro/state.py: In-memory state management
+- tests/mock_nitro/README.md: Documentation and usage
+- tests/test_chain_rotation.py: Tests for Issue #12 scenario
+- requirements-dev.txt: Development dependencies
+
+All tests passing (4/4):
+- test_chain_rotation_without_unlink_fails ✓
+- test_chain_rotation_with_unlink_succeeds ✓
+- test_link_is_idempotent ✓
+- test_authentication_required ✓
+
+This enables local testing and CI/CD without NetScaler hardware. ([`e3b0abe`](https://github.com/slauger/netscaler-certbot-hook/commit/e3b0abe5cf69b28a6cfc9d8dd6d0399144ae616c))
+
+### Fix
+
+* fix: relink certificate to the new chain after a CA rotation
+
+When Let&#39;s Encrypt rotates its intermediate (e.g. E6 -&gt; E7), the new
+chain gets installed under its auto-detected name, but the server
+certificate stayed linked to the old chain forever: the link attempt
+failed on the NetScaler (already linked) and the error was swallowed.
+When the certificate serial was unchanged, nothing happened at all.
+
+The hook now reads linkcertkeyname from the sslcertkey response,
+unlinks from the old chain and relinks to the configured one - both
+during install/update and for an otherwise unchanged certificate.
+
+The chain rotation integration test (issue #12) is now a hard
+assertion instead of skipping on failure. ([`b9012e5`](https://github.com/slauger/netscaler-certbot-hook/commit/b9012e547416448f23952223616a14488a5f4a33))
+
+* fix: validate user-supplied NetScaler object names
+
+Explicit --name and --chain values are now checked against the
+NetScaler object name rules (ASCII alphanumeric or underscore first,
+then alphanumerics plus &#39;_#. :@=-&#39;, at most 31 characters) and fail
+fast with a clear error instead of surfacing cryptic NITRO errors.
+
+Auto-detected chain names are unaffected, they are already sanitized
+by get_certificate_cn. ([`3a561ad`](https://github.com/slauger/netscaler-certbot-hook/commit/3a561adb51bfe760134549de830351661567d641))
+
+* fix: use dynamic ports for mock servers to avoid port conflicts
+
+Previously, tests used fixed ports (5555, 5556) which caused &#39;Address already
+in use&#39; exceptions when Flask server threads didn&#39;t clean up fast enough
+between tests. This resulted in noisy test output with many thread exceptions.
+
+Changes:
+- Mock server fixtures now find a free port dynamically using socket.bind()
+- Each test gets its own unique port, preventing conflicts
+- Test output is now clean with no OSError exceptions
+
+Test results: 24 passed, 1 skipped, 1 warning (down from 9 warnings)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude &lt;noreply@anthropic.com&gt; ([`9e8ea44`](https://github.com/slauger/netscaler-certbot-hook/commit/9e8ea44ac59094e13a9ab1e6852ecdde1e240c40))
+
+### Refactor
+
+* refactor: adopt ruff, black and mypy across the codebase
+
+- format all sources and tests with black
+- fix ruff findings: exception chaining, unused imports, long lines
+- tighten type annotations so mypy passes in strict-ish config
+- read certificates in binary mode as required by pyOpenSSL
+- drop stale module metadata from cli.py, version lives in
+  __init__.py and pyproject.toml ([`bc1399b`](https://github.com/slauger/netscaler-certbot-hook/commit/bc1399b018eecaf52c3a21c285f33cb54a0f706a))
+
+### Test
+
+* test: add comprehensive integration tests with certificate serial tracking
+
+This commit adds end-to-end integration tests that run the complete plugin
+against the Mock NITRO API server to verify real-world scenarios.
+
+Changes:
+- Add tests/test_integration.py with 6 integration tests covering:
+  * Initial certificate installation (fresh NetScaler)
+  * Certificate renewal with same chain
+  * Idempotent runs (no changes needed)
+  * Chain certificate rotation (E6 → E7) for Issue #12
+  * Authentication error handling
+  * Custom chain name override
+
+- Enhanced Mock NITRO API (tests/mock_nitro/):
+  * Store uploaded certificate files in memory
+  * Automatically extract serial numbers from uploaded PEM certificates
+  * Serial number tracking for renewal detection
+  * Realistic certificate state management
+
+The mock server now parses uploaded certificate files using PyOpenSSL to
+extract serial numbers, simulating NetScaler&#39;s behavior. This enables
+accurate testing of certificate renewal scenarios where the plugin
+compares serial numbers to detect changes.
+
+Test for Issue #12 (chain rotation) is included but skipped until the
+feature is implemented. It demonstrates the expected behavior:
+1. Detect main cert is linked to old chain (E6)
+2. Unlink from old chain
+3. Install new chain certificate (E7)
+4. Link to new chain
+
+All tests pass: 24 passed, 1 skipped
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude &lt;noreply@anthropic.com&gt; ([`85a6447`](https://github.com/slauger/netscaler-certbot-hook/commit/85a6447bb028aa5a045504fe3ded55fa5bd3fac9))
+
+### Unknown
+
+* Merge pull request #13 from slauger/feature/mock-nitro-api
+
+test: Add integration tests with Mock NITRO API for Issue #12 ([`aacfa8c`](https://github.com/slauger/netscaler-certbot-hook/commit/aacfa8cadf5d2d977725d7c4a25197a3f34f3dcc))
+
 ## v2.0.0 (2025-11-25)
 
 ### Breaking
@@ -28,6 +227,10 @@ deployments must either:
 2. Delete/rename the old &#34;letsencrypt&#34; chain certificate on NetScaler
 Otherwise, certificate installation will fail because NetScaler only allows
 one instance of each CA certificate. ([`3c408ef`](https://github.com/slauger/netscaler-certbot-hook/commit/3c408efd5f18085dbd75053b61dc86ac0e413f37))
+
+### Chore
+
+* chore(release): 2.0.0 ([`04a9c90`](https://github.com/slauger/netscaler-certbot-hook/commit/04a9c90ffc50021752ab57e3a1254960880b81d9))
 
 ### Feature
 
