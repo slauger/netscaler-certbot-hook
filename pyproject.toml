@@ -11,17 +11,15 @@ authors = [
 description = "Automated SSL certificate management for Citrix NetScaler ADC using Certbot"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 keywords = ["netscaler", "citrix", "adc", "certbot", "letsencrypt", "ssl", "certificate", "automation"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: System Administrators",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Topic :: System :: Systems Administration",
     "Topic :: Security :: Cryptography",
@@ -30,6 +28,19 @@ classifiers = [
 dependencies = [
     "pyOpenSSL>=20.0.0",
     "requests>=2.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.7.0",
+    "ruff>=0.0.285",
+    "mypy>=1.5.0",
+    "types-requests",
+    "types-pyOpenSSL",
+    "flask>=3.0.0",
+    "werkzeug>=3.0.0",
 ]
 
 [project.urls]
@@ -48,6 +59,37 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["netscaler_certbot_hook*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py312", "py313", "py314"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]

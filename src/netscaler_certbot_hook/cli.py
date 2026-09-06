@@ -34,94 +34,119 @@ Examples:
 
 Author: Simon Lauger <simon@lauger.de>
 License: MIT
-Version: 1.0.0
-Copyright: Copyright 2020, IT Consulting Simon Lauger
 """
 
-__author__ = "Simon Lauger"
-__email__ = "simon@lauger.de"
-__version__ = "1.0.0"
-__license__ = "MIT"
-__copyright__ = "Copyright 2020, IT Consulting Simon Lauger"
-__maintainer__ = "Simon Lauger"
-
 import argparse
-import os
-import sys
-import json
-import time
 import base64
-import urllib.parse
-import logging
 import hashlib
-from typing import Dict, Optional, Union, Any
+import json
+import logging
+import os
+import re
+import sys
+import time
+from typing import Any, Dict, Optional, Union
+
+import requests
 from OpenSSL import crypto
+
 from . import nitro
 
 # Initialize logger
 logger = logging.getLogger(__name__)
 
+# NetScaler object names must begin with an ASCII alphanumeric or underscore,
+# may contain only ASCII alphanumerics and _ # . space : @ = - characters,
+# and are limited to 31 characters (sslcertkey limit)
+NETSCALER_OBJECT_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_#. :@=-]{0,30}$")
+
+
+def validate_object_name(name: str, option: str) -> None:
+    """Validate a user-supplied NetScaler object name.
+
+    Args:
+        name (str): The object name to validate.
+        option (str): Name of the CLI option the value came from (for the error message).
+
+    Raises:
+        ValueError: If the name is not a valid NetScaler object name.
+    """
+    if not NETSCALER_OBJECT_NAME_RE.match(name):
+        raise ValueError(
+            "invalid NetScaler object name {!r} for {}: must start with a letter, digit or "
+            "underscore, may only contain letters, digits and '_#. :@=-' and must not be "
+            "longer than 31 characters".format(name, option)
+        )
+
+
 add_args = {
-  '--name': {
-    'metavar': '<string>',
-    'help': 'object name of the ssl certificate',
-    'type': str,
-    'default': None,
-    'required': True,
-  },
-  '--chain': {
-    'metavar': '<string>',
-    'help': 'object name of the ssl chain certificate',
-    'type': str,
-    'default': 'letsencrypt',
-    'required': False,
-  },
-  '--cert': {
-    'metavar': '<file>',
-    'help': 'path to the ssl certificate (default: /etc/letsencrypt/live/name/cert.pem)',
-    'type': str,
-    'default': None,
-    'required': False,
-  },
-  '--privkey': {
-    'metavar': '<file>',
-    'help': 'path to the ssl private key (default: /etc/letsencrypt/live/name/privkey.pem)',
-    'type': str,
-    'default': None,
-    'required': False,
-  },
-  '--chain-cert': {
-    'metavar': '<file>',
-    'help': 'path to the ssl chain certificate (default: /etc/letsencrypt/live/name/chain.pem)',
-    'type': str,
-    'default': None,
-    'required': False,
-  },
-  '--verbose': {
-    'help': 'enable verbose output (DEBUG level)',
-    'action': 'store_true',
-    'default': False,
-    'required': False,
-  },
-  '--quiet': {
-    'help': 'suppress all output except errors (ERROR level)',
-    'action': 'store_true',
-    'default': False,
-    'required': False,
-  },
-  '--update-chain': {
-    'help': 'allow updating chain certificate if serial differs',
-    'action': 'store_true',
-    'default': False,
-    'required': False,
-  },
-  '--no-domain-check': {
-    'help': 'skip domain validation when updating certificates (required for chain updates and multi-domain certificates)',
-    'action': 'store_true',
-    'default': False,
-    'required': False,
-  },
+    "--name": {
+        "metavar": "<string>",
+        "help": "object name of the ssl certificate",
+        "type": str,
+        "default": None,
+        "required": True,
+    },
+    "--chain": {
+        "metavar": "<string>",
+        "help": (
+            "object name of the ssl chain certificate "
+            "(default: auto-detected from the chain certificate CN)"
+        ),
+        "type": str,
+        "default": None,
+        "required": False,
+    },
+    "--cert": {
+        "metavar": "<file>",
+        "help": "path to the ssl certificate (default: /etc/letsencrypt/live/name/cert.pem)",
+        "type": str,
+        "default": None,
+        "required": False,
+    },
+    "--privkey": {
+        "metavar": "<file>",
+        "help": "path to the ssl private key (default: /etc/letsencrypt/live/name/privkey.pem)",
+        "type": str,
+        "default": None,
+        "required": False,
+    },
+    "--chain-cert": {
+        "metavar": "<file>",
+        "help": "path to the ssl chain certificate (default: /etc/letsencrypt/live/name/chain.pem)",
+        "type": str,
+        "default": None,
+        "required": False,
+    },
+    "--verbose": {
+        "help": "enable verbose output (DEBUG level)",
+        "action": "store_true",
+        "default": False,
+        "required": False,
+    },
+    "--quiet": {
+        "help": "suppress all output except errors (ERROR level)",
+        "action": "store_true",
+        "default": False,
+        "required": False,
+    },
+    "--update-chain": {
+        "help": "allow updating chain certificate if serial differs",
+        "action": "store_true",
+        "default": False,
+        "required": False,
+    },
+    "--no-domain-check": {
+        "help": (
+            "skip domain validation when updating certificates "
+            "(required for chain updates and multi-domain certificates)"
+        ),
+        "action": "store_true",
+        "default": False,
+        "required": False,
+    },
 }
+
 
 def add_argument(parser: argparse.ArgumentParser, arg: str, params: Dict[str, Any]) -> None:
     """Add an argument to the argument parser.
@@ -132,23 +157,23 @@ def add_argument(parser: argparse.ArgumentParser, arg: str, params: Dict[str, An
         params (dict): Argument parameters (metavar, type, help, default, required, action).
     """
     # Build kwargs dynamically based on params
-    kwargs = {'help': params['help']}
+    kwargs = {"help": params["help"]}
 
-    if 'metavar' in params:
-        kwargs['metavar'] = params['metavar']
-    if 'type' in params:
-        kwargs['type'] = params['type']
-    if 'default' in params:
-        kwargs['default'] = params['default']
-    if 'required' in params:
-        kwargs['required'] = params['required']
-    if 'action' in params:
-        kwargs['action'] = params['action']
+    if "metavar" in params:
+        kwargs["metavar"] = params["metavar"]
+    if "type" in params:
+        kwargs["type"] = params["type"]
+    if "default" in params:
+        kwargs["default"] = params["default"]
+    if "required" in params:
+        kwargs["required"] = params["required"]
+    if "action" in params:
+        kwargs["action"] = params["action"]
 
     parser.add_argument(arg, **kwargs)
 
 
-def nitro_check_cert(nitro_client: nitro.NitroClient, objectname: str) -> Union[Dict[str, Any], bool]:
+def nitro_check_cert(nitro_client: nitro.NitroClient, objectname: str) -> Optional[Dict[str, Any]]:
     """Check if a certificate exists on the NetScaler.
 
     Args:
@@ -156,7 +181,7 @@ def nitro_check_cert(nitro_client: nitro.NitroClient, objectname: str) -> Union[
         objectname (str): Name of the certificate object to check.
 
     Returns:
-        dict or bool: Certificate information dict if found, False otherwise.
+        dict or None: Certificate information dict if found, None otherwise.
 
     Example:
         >>> cert = nitro_check_cert(client, 'mydomain.com')
@@ -165,18 +190,20 @@ def nitro_check_cert(nitro_client: nitro.NitroClient, objectname: str) -> Union[
     """
     try:
         result = nitro_client.request(
-            'get',
-            endpoint='config',
-            objecttype='sslcertkey',
+            "get",
+            endpoint="config",
+            objecttype="sslcertkey",
             objectname=objectname,
         )
-    except Exception as e:
+    except Exception:
         # Certificate not found or other API error
-        return False
-    return result
+        return None
+    return result if isinstance(result, dict) else None
 
 
-def nitro_upload(nitro_client: nitro.NitroClient, source_file: str, target_filename: str) -> Dict[str, Any]:
+def nitro_upload(
+    nitro_client: nitro.NitroClient, source_file: str, target_filename: str
+) -> Union[Dict[str, Any], requests.Response]:
     """Upload a file to the NetScaler /nsconfig/ssl directory.
 
     Args:
@@ -191,21 +218,25 @@ def nitro_upload(nitro_client: nitro.NitroClient, source_file: str, target_filen
         Exception: If the upload fails or file cannot be read.
     """
     return nitro_client.request(
-        'post',
-        endpoint='config',
-        objecttype='systemfile',
-        data=json.dumps({
-            'systemfile': {
-                'filename': target_filename,
-                'filecontent': base64.b64encode(open(source_file, 'rb').read()).decode('utf-8'),
-                'filelocation': '/nsconfig/ssl',
-                'fileencoding': 'BASE64',
+        "post",
+        endpoint="config",
+        objecttype="systemfile",
+        data=json.dumps(
+            {
+                "systemfile": {
+                    "filename": target_filename,
+                    "filecontent": base64.b64encode(open(source_file, "rb").read()).decode("utf-8"),
+                    "filelocation": "/nsconfig/ssl",
+                    "fileencoding": "BASE64",
+                }
             }
-        }),
+        ),
     )
 
 
-def nitro_delete(nitro_client: nitro.NitroClient, filename: str) -> Dict[str, Any]:
+def nitro_delete(
+    nitro_client: nitro.NitroClient, filename: str
+) -> Union[Dict[str, Any], requests.Response]:
     """Delete a file from the NetScaler /nsconfig/ssl directory.
 
     Args:
@@ -216,16 +247,22 @@ def nitro_delete(nitro_client: nitro.NitroClient, filename: str) -> Dict[str, An
         dict: API response from the delete operation.
     """
     return nitro_client.request(
-        'delete',
-        endpoint='config',
-        objecttype='systemfile',
+        "delete",
+        endpoint="config",
+        objecttype="systemfile",
         objectname=filename,
-        params={'args': 'filelocation:%%2Fnsconfig%%2Fssl'},
+        params={"args": "filelocation:%%2Fnsconfig%%2Fssl"},
     )
 
 
-def nitro_install_cert(nitro_client: nitro.NitroClient, name: str, cert: Optional[str] = None,
-                       key: Optional[str] = None, update: bool = False, no_domain_check: bool = False) -> Dict[str, Any]:
+def nitro_install_cert(
+    nitro_client: nitro.NitroClient,
+    name: str,
+    cert: Optional[str] = None,
+    key: Optional[str] = None,
+    update: bool = False,
+    no_domain_check: bool = False,
+) -> Union[Dict[str, Any], requests.Response]:
     """Install or update a certificate on the NetScaler.
 
     Args:
@@ -233,8 +270,10 @@ def nitro_install_cert(nitro_client: nitro.NitroClient, name: str, cert: Optiona
         name (str): Certificate object name.
         cert (str, optional): Certificate filename on NetScaler. Defaults to None.
         key (str, optional): Private key filename on NetScaler. Defaults to None.
-        update (bool, optional): True to update existing cert, False to create new. Defaults to False.
-        no_domain_check (bool, optional): Skip domain check when updating certificate. Defaults to False.
+        update (bool, optional): True to update existing cert, False to create new.
+            Defaults to False.
+        no_domain_check (bool, optional): Skip domain check when updating certificate.
+            Defaults to False.
 
     Returns:
         dict: API response from the installation/update operation.
@@ -242,34 +281,36 @@ def nitro_install_cert(nitro_client: nitro.NitroClient, name: str, cert: Optiona
     Example:
         >>> nitro_install_cert(client, 'mydomain.com', cert='mydomain.crt', key='mydomain.key')
     """
-    data = {
-        'sslcertkey': {
-            'certkey': name,
+    data: Dict[str, Dict[str, Any]] = {
+        "sslcertkey": {
+            "certkey": name,
         }
     }
 
     if update:
-        params = {'action': 'update'}
+        params = {"action": "update"}
     else:
         params = {}
 
     if cert:
-        data['sslcertkey']['cert'] = "/nsconfig/ssl/{}".format(cert)
+        data["sslcertkey"]["cert"] = "/nsconfig/ssl/{}".format(cert)
     if key:
-        data['sslcertkey']['key'] = "/nsconfig/ssl/{}".format(key)
+        data["sslcertkey"]["key"] = "/nsconfig/ssl/{}".format(key)
     if no_domain_check:
-        data['sslcertkey']['nodomaincheck'] = True
+        data["sslcertkey"]["nodomaincheck"] = True
 
     return nitro_client.request(
-        'post',
-        endpoint='config',
-        objecttype='sslcertkey',
+        "post",
+        endpoint="config",
+        objecttype="sslcertkey",
         data=json.dumps(data),
         params=params,
     )
 
 
-def nitro_link_cert(nitro_client: nitro.NitroClient, name: str, chain: str) -> Dict[str, Any]:
+def nitro_link_cert(
+    nitro_client: nitro.NitroClient, name: str, chain: str
+) -> Union[Dict[str, Any], requests.Response]:
     """Link a certificate to its chain certificate.
 
     Args:
@@ -284,20 +325,52 @@ def nitro_link_cert(nitro_client: nitro.NitroClient, name: str, chain: str) -> D
         Exception: If the link operation fails (e.g., link already exists).
     """
     return nitro_client.request(
-        'post',
-        endpoint='config',
-        objecttype='sslcertkey',
-        data=json.dumps({
-            'sslcertkey': {
-                'certkey': name,
-                'linkcertkeyname': chain,
+        "post",
+        endpoint="config",
+        objecttype="sslcertkey",
+        data=json.dumps(
+            {
+                "sslcertkey": {
+                    "certkey": name,
+                    "linkcertkeyname": chain,
+                }
             }
-        }),
-        params={'action': 'link'},
+        ),
+        params={"action": "link"},
     )
 
 
-def nitro_save_config(nitro_client: nitro.NitroClient) -> Dict[str, Any]:
+def nitro_unlink_cert(
+    nitro_client: nitro.NitroClient, name: str
+) -> Union[Dict[str, Any], requests.Response]:
+    """Unlink a certificate from its current chain certificate.
+
+    Args:
+        nitro_client (NitroClient): Configured NITRO API client instance.
+        name (str): Certificate object name.
+
+    Returns:
+        dict: API response from the unlink operation.
+
+    Raises:
+        Exception: If the unlink operation fails (e.g., no link exists).
+    """
+    return nitro_client.request(
+        "post",
+        endpoint="config",
+        objecttype="sslcertkey",
+        data=json.dumps(
+            {
+                "sslcertkey": {
+                    "certkey": name,
+                }
+            }
+        ),
+        params={"action": "unlink"},
+    )
+
+
+def nitro_save_config(nitro_client: nitro.NitroClient) -> Union[Dict[str, Any], requests.Response]:
     """Save the NetScaler running configuration to disk.
 
     Args:
@@ -310,14 +383,13 @@ def nitro_save_config(nitro_client: nitro.NitroClient) -> Dict[str, Any]:
         This makes configuration changes persistent across reboots.
     """
     return nitro_client.request(
-        'post',
-        endpoint='config',
-        objecttype='nsconfig',
-        data=json.dumps({
-            'nsconfig': {}
-        }),
-        params={'action': 'save'},
+        "post",
+        endpoint="config",
+        objecttype="nsconfig",
+        data=json.dumps({"nsconfig": {}}),
+        params={"action": "save"},
     )
+
 
 def parse_arguments() -> argparse.Namespace:
     """Parse and validate command line arguments.
@@ -325,7 +397,7 @@ def parse_arguments() -> argparse.Namespace:
     Returns:
         argparse.Namespace: Parsed command line arguments containing:
             - name: Certificate object name (required)
-            - chain: Chain certificate name (default: 'letsencrypt')
+            - chain: Chain certificate name (default: auto-detected from CN)
             - cert: Path to certificate file (optional)
             - privkey: Path to private key file (optional)
             - chain_cert: Path to chain certificate file (optional)
@@ -336,7 +408,7 @@ def parse_arguments() -> argparse.Namespace:
         'mydomain.com'
     """
     parser = argparse.ArgumentParser(
-        description='Install and manage SSL certificates on Citrix NetScaler ADC.'
+        description="Install and manage SSL certificates on Citrix NetScaler ADC."
     )
 
     for key in add_args:
@@ -345,7 +417,7 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def get_config(args: argparse.Namespace) -> Dict[str, Union[str, bool, int]]:
+def get_config(args: argparse.Namespace) -> Dict[str, Any]:
     """Build and validate configuration from environment variables and arguments.
 
     Reads configuration from environment variables (NS_URL, NS_LOGIN, NS_PASSWORD, NS_VERIFY_SSL)
@@ -379,52 +451,64 @@ def get_config(args: argparse.Namespace) -> Dict[str, Union[str, bool, int]]:
         >>> print(config['url'])
         'https://192.168.10.10'
     """
+    # Fail fast on invalid object names instead of surfacing cryptic NITRO errors
+    validate_object_name(args.name, "--name")
+    if args.chain is not None:
+        validate_object_name(args.chain, "--chain")
+
     config = {
-        'username': os.getenv('NS_LOGIN', 'nsroot'),
-        'password': os.getenv('NS_PASSWORD', 'nsroot'),
-        'verify_ssl': os.getenv('NS_VERIFY_SSL', 'true').lower() in ('true', '1', 'yes'),
-        'url': os.getenv('NS_URL', None),
-        'cert_file': args.cert or '/etc/letsencrypt/live/{}/cert.pem'.format(args.name),
-        'privkey_file': args.privkey or '/etc/letsencrypt/live/{}/privkey.pem'.format(args.name),
-        'chain_file': args.chain_cert or '/etc/letsencrypt/live/{}/chain.pem'.format(args.name),
-        'cert_name': args.name,
-        'chain_name': args.chain,
-        'update_chain': args.update_chain,
-        'no_domain_check': args.no_domain_check,
-        'timestamp': int(time.time()),
+        "username": os.getenv("NS_LOGIN", "nsroot"),
+        "password": os.getenv("NS_PASSWORD", "nsroot"),
+        "verify_ssl": os.getenv("NS_VERIFY_SSL", "true").lower() in ("true", "1", "yes"),
+        "url": os.getenv("NS_URL", None),
+        "cert_file": args.cert or "/etc/letsencrypt/live/{}/cert.pem".format(args.name),
+        "privkey_file": args.privkey or "/etc/letsencrypt/live/{}/privkey.pem".format(args.name),
+        "chain_file": args.chain_cert or "/etc/letsencrypt/live/{}/chain.pem".format(args.name),
+        "cert_name": args.name,
+        "chain_name": args.chain,
+        "update_chain": args.update_chain,
+        "no_domain_check": args.no_domain_check,
+        "timestamp": int(time.time()),
     }
 
     # Validate required configuration
-    if config['url'] is None:
-        raise ValueError('required environment variable NS_URL not set')
+    if config["url"] is None:
+        raise ValueError("required environment variable NS_URL not set")
 
-    if not config['url'].startswith('http://') and not config['url'].startswith('https://'):
-        raise ValueError('NS_URL must start with http:// or https://')
+    if not config["url"].startswith("http://") and not config["url"].startswith("https://"):
+        raise ValueError("NS_URL must start with http:// or https://")
 
-    if not config['username']:
-        raise ValueError('NS_LOGIN environment variable must not be empty')
+    if not config["username"]:
+        raise ValueError("NS_LOGIN environment variable must not be empty")
 
-    if not config['password']:
-        raise ValueError('NS_PASSWORD environment variable must not be empty')
+    if not config["password"]:
+        raise ValueError("NS_PASSWORD environment variable must not be empty")
 
     # Validate certificate files exist
-    for file_key, file_path in [('cert_file', config['cert_file']),
-                                 ('privkey_file', config['privkey_file']),
-                                 ('chain_file', config['chain_file'])]:
+    for file_key, file_path in [
+        ("cert_file", config["cert_file"]),
+        ("privkey_file", config["privkey_file"]),
+        ("chain_file", config["chain_file"]),
+    ]:
         if not os.path.isfile(file_path):
-            raise FileNotFoundError('{} not found: {}'.format(file_key, file_path))
+            raise FileNotFoundError("{} not found: {}".format(file_key, file_path))
 
-    # If chain name is default 'letsencrypt', try to auto-detect from chain certificate CN
-    if config['chain_name'] == 'letsencrypt':
+    # Without an explicit --chain, auto-detect the name from the chain certificate CN
+    if config["chain_name"] is None:
         try:
-            chain_cn = get_certificate_cn(config['chain_file'])
-            config['chain_name'] = chain_cn
+            chain_cn = get_certificate_cn(config["chain_file"])
+            config["chain_name"] = chain_cn
             logger.debug("Auto-detected chain certificate name from CN: %s", chain_cn)
         except Exception as e:
-            # If CN extraction fails, keep the default 'letsencrypt'
-            logger.debug("Could not auto-detect chain name from CN (%s), using default: %s", str(e), config['chain_name'])
+            config["chain_name"] = "letsencrypt"
+            logger.debug(
+                "Could not auto-detect chain name from CN (%s), using fallback: %s",
+                str(e),
+                config["chain_name"],
+            )
 
     return config
+
 
 def get_certificate_serial(cert_file: str) -> int:
     """Extract serial number from a PEM certificate file.
@@ -449,14 +533,14 @@ def get_certificate_serial(cert_file: str) -> int:
         raise FileNotFoundError("Certificate file not found: {}".format(cert_file))
 
     try:
-        with open(cert_file, 'r') as f:
+        with open(cert_file, "rb") as f:
             cert_data = f.read()
         cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_data)
         return cert.get_serial_number()
     except (IOError, OSError) as e:
-        raise IOError("Failed to read certificate file {}: {}".format(cert_file, str(e)))
+        raise IOError("Failed to read certificate file {}: {}".format(cert_file, str(e))) from e
     except crypto.Error as e:
-        raise ValueError("Invalid certificate format in {}: {}".format(cert_file, str(e)))
+        raise ValueError("Invalid certificate format in {}: {}".format(cert_file, str(e))) from e
 
 
 def get_certificate_cn(cert_file: str) -> str:
@@ -482,7 +566,7 @@ def get_certificate_cn(cert_file: str) -> str:
         raise FileNotFoundError("Certificate file not found: {}".format(cert_file))
 
     try:
-        with open(cert_file, 'r') as f:
+        with open(cert_file, "rb") as f:
             cert_data = f.read()
         cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_data)
 
@@ -498,32 +582,36 @@ def get_certificate_cn(cert_file: str) -> str:
         # (NetScaler technically allows more, but we keep it conservative)
         # Must start with alphanumeric or underscore
         # Maximum length: 31 characters (NetScaler limit)
-        allowed_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ')
+        allowed_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ")
         # Remove apostrophes completely, replace other invalid chars with hyphen
-        sanitized_cn = ''.join(c if c in allowed_chars else ('' if c == "'" else '-') for c in cn)
+        sanitized_cn = "".join(c if c in allowed_chars else ("" if c == "'" else "-") for c in cn)
 
         # Ensure it starts with alphanumeric or underscore
-        if sanitized_cn and not (sanitized_cn[0].isalnum() or sanitized_cn[0] == '_'):
-            sanitized_cn = '_' + sanitized_cn
+        if sanitized_cn and not (sanitized_cn[0].isalnum() or sanitized_cn[0] == "_"):
+            sanitized_cn = "_" + sanitized_cn
 
         # Handle names longer than 31 characters (NetScaler limit)
         if len(sanitized_cn) > 31:
             # Generate hash from original CN to ensure uniqueness
-            cn_hash = hashlib.sha256(cn.encode('utf-8')).hexdigest()[:6]
+            cn_hash = hashlib.sha256(cn.encode("utf-8")).hexdigest()[:6]
             # Take first 24 chars + hyphen + 6 char hash = 31 chars total
-            sanitized_cn = sanitized_cn[:24] + '-' + cn_hash
-            logger.debug("Chain certificate name truncated with hash suffix: %s (from: %s)", sanitized_cn, cn)
+            sanitized_cn = sanitized_cn[:24] + "-" + cn_hash
+            logger.debug(
+                "Chain certificate name truncated with hash suffix: %s (from: %s)", sanitized_cn, cn
+            )
 
         return sanitized_cn
     except (IOError, OSError) as e:
-        raise IOError("Failed to read certificate file {}: {}".format(cert_file, str(e)))
+        raise IOError("Failed to read certificate file {}: {}".format(cert_file, str(e))) from e
     except crypto.Error as e:
-        raise ValueError("Invalid certificate format in {}: {}".format(cert_file, str(e)))
+        raise ValueError("Invalid certificate format in {}: {}".format(cert_file, str(e))) from e
     except AttributeError:
-        raise ValueError("Could not extract Common Name from certificate in {}".format(cert_file))
+        raise ValueError(
+            "Could not extract Common Name from certificate in {}".format(cert_file)
+        ) from None
 
 
-def process_chain_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Union[str, bool, int]]) -> None:
+def process_chain_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Any]) -> None:
     """Process and install chain certificate if needed.
 
     Checks if the chain certificate exists on the NetScaler. If it exists and matches
@@ -544,37 +632,55 @@ def process_chain_certificate(nitro_client: nitro.NitroClient, config: Dict[str,
         serial number differs. Use --update-chain flag to enable chain certificate updates.
         This is disabled by default for security reasons to prevent unexpected chain changes.
     """
-    chain_serial = get_certificate_serial(config['chain_file'])
-    check_chain = nitro_check_cert(nitro_client, config['chain_name'])
+    chain_serial = get_certificate_serial(config["chain_file"])
+    check_chain = nitro_check_cert(nitro_client, config["chain_name"])
 
     if check_chain:
-        installed_serial = int(check_chain['sslcertkey'][0]['serial'], 16)
-        logger.info("chain certificate %s found with serial %s", config['chain_name'], installed_serial)
+        installed_serial = int(check_chain["sslcertkey"][0]["serial"], 16)
+        logger.info(
+            "chain certificate %s found with serial %s", config["chain_name"], installed_serial
+        )
 
         if installed_serial == chain_serial:
             logger.info("installed chain certificate matches our serial - nothing to do")
         else:
-            if config['update_chain']:
-                logger.warning("chain certificate serial differs - updating due to --update-chain flag")
+            if config["update_chain"]:
+                logger.warning(
+                    "chain certificate serial differs - updating due to --update-chain flag"
+                )
                 logger.info("old serial: %s, new serial: %s", installed_serial, chain_serial)
-                chain_filename = '{}-{}.crt'.format(config['chain_name'], config['timestamp'])
+                chain_filename = "{}-{}.crt".format(config["chain_name"], config["timestamp"])
                 logger.info("uploading chain certificate as %s", chain_filename)
-                nitro_upload(nitro_client, config['chain_file'], chain_filename)
+                nitro_upload(nitro_client, config["chain_file"], chain_filename)
                 logger.info("updating chain certificate with serial %s", chain_serial)
-                nitro_install_cert(nitro_client, config['chain_name'], cert=chain_filename, update=True, no_domain_check=config['no_domain_check'])
+                nitro_install_cert(
+                    nitro_client,
+                    config["chain_name"],
+                    cert=chain_filename,
+                    update=True,
+                    no_domain_check=config["no_domain_check"],
+                )
             else:
-                raise Exception('serial of installed chain certificate does not match our serial (use --update-chain to allow updates)')
+                raise Exception(
+                    "serial of installed chain certificate does not match our serial "
+                    "(use --update-chain to allow updates)"
+                )
     else:
-        logger.info("chain certificate %s not found", config['chain_name'])
-        chain_filename = '{}-{}.crt'.format(config['chain_name'], config['timestamp'])
+        logger.info("chain certificate %s not found", config["chain_name"])
+        chain_filename = "{}-{}.crt".format(config["chain_name"], config["timestamp"])
         logger.info("uploading chain certificate as %s", chain_filename)
-        nitro_upload(nitro_client, config['chain_file'], chain_filename)
+        nitro_upload(nitro_client, config["chain_file"], chain_filename)
         logger.info("installing chain certificate with serial %s", chain_serial)
-        nitro_install_cert(nitro_client, config['chain_name'], cert=chain_filename)
+        nitro_install_cert(nitro_client, config["chain_name"], cert=chain_filename)
 
 
-def install_or_update_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Union[str, bool, int]],
-                                   cert_serial: int, update: bool = False) -> None:
+def install_or_update_certificate(
+    nitro_client: nitro.NitroClient,
+    config: Dict[str, Any],
+    cert_serial: int,
+    update: bool = False,
+    current_link: Optional[str] = None,
+) -> None:
     """Install or update a certificate on the NetScaler.
 
     Uploads the certificate and private key files, installs or updates the certificate
@@ -586,38 +692,78 @@ def install_or_update_certificate(nitro_client: nitro.NitroClient, config: Dict[
         cert_serial (int): Serial number of the certificate being installed.
         update (bool, optional): True to update existing certificate, False to create new.
                                 Defaults to False.
+        current_link (str, optional): Chain the certificate is currently linked to.
+                                Defaults to None.
 
     Note:
         This function automatically handles linking to the chain certificate and
         saves the NetScaler configuration after installation.
     """
-    cert_filename = '{}-{}.crt'.format(config['cert_name'], config['timestamp'])
-    key_filename = '{}-{}.key'.format(config['cert_name'], config['timestamp'])
+    cert_filename = "{}-{}.crt".format(config["cert_name"], config["timestamp"])
+    key_filename = "{}-{}.key".format(config["cert_name"], config["timestamp"])
 
     logger.info("uploading certificate as %s", cert_filename)
-    nitro_upload(nitro_client, config['cert_file'], cert_filename)
+    nitro_upload(nitro_client, config["cert_file"], cert_filename)
     logger.info("uploading private key as %s", key_filename)
-    nitro_upload(nitro_client, config['privkey_file'], key_filename)
+    nitro_upload(nitro_client, config["privkey_file"], key_filename)
 
     if update:
-        logger.info("update certificate %s", config['cert_name'])
+        logger.info("update certificate %s", config["cert_name"])
     else:
         logger.info("installing certificate with serial %s", cert_serial)
 
-    nitro_install_cert(nitro_client, config['cert_name'], cert=cert_filename, key=key_filename, update=update, no_domain_check=config['no_domain_check'])
+    nitro_install_cert(
+        nitro_client,
+        config["cert_name"],
+        cert=cert_filename,
+        key=key_filename,
+        update=update,
+        no_domain_check=config["no_domain_check"],
+    )
 
-    logger.info("link certificate %s to chain certificate %s", config['cert_name'], config['chain_name'])
-    try:
-        nitro_link_cert(nitro_client, config['cert_name'], config['chain_name'])
-    except Exception as e:
-        # Link already exists, which is fine
-        logger.info("certificate link was already present - nothing to do")
+    relink_certificate(nitro_client, config, current_link)
 
     logger.info("saving configuration")
     nitro_save_config(nitro_client)
 
 
-def process_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Union[str, bool, int]]) -> None:
+def relink_certificate(
+    nitro_client: nitro.NitroClient, config: Dict[str, Any], current_link: Optional[str]
+) -> None:
+    """Ensure the certificate is linked to the configured chain certificate.
+
+    Unlinks the certificate from a previously linked chain first if it points
+    to a different chain (e.g. after a CA rotation from E6 to E7).
+
+    Args:
+        nitro_client (NitroClient): Configured NITRO API client instance.
+        config (dict): Configuration dictionary from get_config().
+        current_link (str, optional): Chain the certificate is currently linked to,
+            or None if it is not linked.
+    """
+    if current_link == config["chain_name"]:
+        logger.info("certificate link to chain certificate %s already present", current_link)
+        return
+
+    if current_link:
+        logger.info(
+            "unlinking certificate %s from old chain certificate %s",
+            config["cert_name"],
+            current_link,
+        )
+        nitro_unlink_cert(nitro_client, config["cert_name"])
+
+    logger.info(
+        "link certificate %s to chain certificate %s", config["cert_name"], config["chain_name"]
+    )
+    try:
+        nitro_link_cert(nitro_client, config["cert_name"], config["chain_name"])
+    except Exception:
+        # Link already exists, which is fine
+        logger.info("certificate link was already present - nothing to do")
+
+
+def process_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Any]) -> None:
     """Process and install or update the main certificate.
 
     Checks if the certificate exists on the NetScaler. Compares serial numbers and
@@ -628,24 +774,41 @@ def process_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Union
         config (dict): Configuration dictionary from get_config().
 
     Behavior:
-        - If certificate exists and serial matches: No action taken
+        - If certificate exists and serial matches: Only relinks if the chain changed
         - If certificate exists and serial differs: Updates the certificate
         - If certificate doesn't exist: Installs new certificate
     """
-    cert_serial = get_certificate_serial(config['cert_file'])
-    check_cert = nitro_check_cert(nitro_client, config['cert_name'])
+    cert_serial = get_certificate_serial(config["cert_file"])
+    check_cert = nitro_check_cert(nitro_client, config["cert_name"])
 
     if check_cert:
-        installed_serial = int(check_cert['sslcertkey'][0]['serial'], 16)
-        logger.info("certificate %s found with serial %s", config['cert_name'], installed_serial)
+        cert_info = check_cert["sslcertkey"][0]
+        installed_serial = int(cert_info["serial"], 16)
+        current_link = cert_info.get("linkcertkeyname")
+        logger.info("certificate %s found with serial %s", config["cert_name"], installed_serial)
 
         if installed_serial == cert_serial:
-            logger.info("installed certificate matches our serial - nothing to do")
+            if current_link == config["chain_name"]:
+                logger.info("installed certificate matches our serial - nothing to do")
+            else:
+                # Certificate is unchanged but the chain rotated (e.g. E6 -> E7)
+                logger.info(
+                    "installed certificate matches our serial but is linked to %s "
+                    "instead of %s - relinking",
+                    current_link,
+                    config["chain_name"],
+                )
+                relink_certificate(nitro_client, config, current_link)
+                logger.info("saving configuration")
+                nitro_save_config(nitro_client)
         else:
-            install_or_update_certificate(nitro_client, config, cert_serial, update=True)
+            install_or_update_certificate(
+                nitro_client, config, cert_serial, update=True, current_link=current_link
+            )
     else:
-        logger.info("certificate %s not found", config['cert_name'])
+        logger.info("certificate %s not found", config["cert_name"])
         install_or_update_certificate(nitro_client, config, cert_serial, update=False)
+
 
 def setup_logging(verbose: bool = False, quiet: bool = False) -> None:
     """Configure logging based on verbosity flags.
@@ -666,16 +829,15 @@ def setup_logging(verbose: bool = False, quiet: bool = False) -> None:
         log_level = logging.INFO
 
     # Configure logging format
-    log_format = '%(message)s'
+    log_format = "%(message)s"
     if verbose:
         # More detailed format for debug mode
-        log_format = '%(levelname)s: %(message)s'
+        log_format = "%(levelname)s: %(message)s"
 
     logging.basicConfig(
-        level=log_level,
-        format=log_format,
-        handlers=[logging.StreamHandler(sys.stdout)]
+        level=log_level, format=log_format, handlers=[logging.StreamHandler(sys.stdout)]
     )
+
 
 def main() -> None:
     """Main entry point for certificate installation and management.
@@ -717,10 +879,10 @@ def main() -> None:
     config = get_config(args)
 
     # Initialize NITRO client
-    logger.debug("Connecting to NetScaler at %s", config['url'])
-    nitro_client = nitro.NitroClient(config['url'], config['username'], config['password'])
-    nitro_client.set_verify(config['verify_ssl'])
-    nitro_client.on_error('continue')
+    logger.debug("Connecting to NetScaler at %s", config["url"])
+    nitro_client = nitro.NitroClient(config["url"], config["username"], config["password"])
+    nitro_client.set_verify(config["verify_ssl"])
+    nitro_client.on_error("continue")
 
     # Process chain certificate
     process_chain_certificate(nitro_client, config)
@@ -731,7 +893,7 @@ def main() -> None:
     logger.debug("NetScaler Certbot Hook completed successfully")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         main()
         sys.exit(0)
