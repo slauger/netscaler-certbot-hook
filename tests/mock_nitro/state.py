@@ -4,9 +4,10 @@ This module maintains an in-memory state of certificates, links, and other
 NetScaler configuration objects for testing purposes.
 """
 
-from typing import Dict, Any, Optional
-from copy import deepcopy
 import base64
+from copy import deepcopy
+from typing import Any, Dict, Optional
+
 from OpenSSL import crypto
 
 # In-memory certificate storage
@@ -16,10 +17,7 @@ _certificates: Dict[str, Dict[str, Any]] = {}
 _uploaded_files: Dict[str, str] = {}
 
 # User database for authentication
-USERS = {
-    "nsroot": "nsroot",
-    "testuser": "testpass123"
-}
+USERS = {"nsroot": "nsroot", "testuser": "testpass123"}
 
 
 def reset_state() -> None:
@@ -49,7 +47,7 @@ def extract_serial_from_cert(cert_path: str) -> Optional[str]:
         Hex serial number string (e.g., '0x123abc') or None if not found
     """
     # Extract just the filename from the path
-    filename = cert_path.split('/')[-1]
+    filename = cert_path.split("/")[-1]
 
     if filename not in _uploaded_files:
         return None
@@ -80,7 +78,7 @@ def add_certificate(cert_data: Dict[str, Any]) -> None:
     Raises:
         ValueError: If certificate already exists
     """
-    certkey = cert_data.get('certkey')
+    certkey = cert_data.get("certkey")
     if not certkey:
         raise ValueError("certkey is required")
 
@@ -88,10 +86,10 @@ def add_certificate(cert_data: Dict[str, Any]) -> None:
         raise ValueError(f"Certificate {certkey} already exists")
 
     # If no serial provided, try to extract from uploaded certificate file
-    if 'serial' not in cert_data and 'cert' in cert_data:
-        serial = extract_serial_from_cert(cert_data['cert'])
+    if "serial" not in cert_data and "cert" in cert_data:
+        serial = extract_serial_from_cert(cert_data["cert"])
         if serial:
-            cert_data['serial'] = serial
+            cert_data["serial"] = serial
 
     _certificates[certkey] = deepcopy(cert_data)
 
@@ -122,10 +120,10 @@ def update_certificate(certkey: str, updates: Dict[str, Any]) -> None:
         raise ValueError(f"Certificate {certkey} not found")
 
     # If cert file is being updated, extract new serial
-    if 'cert' in updates and 'serial' not in updates:
-        serial = extract_serial_from_cert(updates['cert'])
+    if "cert" in updates and "serial" not in updates:
+        serial = extract_serial_from_cert(updates["cert"])
         if serial:
-            updates['serial'] = serial
+            updates["serial"] = serial
 
     _certificates[certkey].update(updates)
 
@@ -147,7 +145,7 @@ def link_certificate(certkey: str, chain_name: str) -> None:
         raise ValueError(f"Chain certificate {chain_name} not found")
 
     cert = _certificates[certkey]
-    current_link = cert.get('linkcertkeyname')
+    current_link = cert.get("linkcertkeyname")
 
     # Check if already linked to a DIFFERENT chain
     if current_link and current_link != chain_name:
@@ -161,7 +159,7 @@ def link_certificate(certkey: str, chain_name: str) -> None:
         return
 
     # Set the link
-    _certificates[certkey]['linkcertkeyname'] = chain_name
+    _certificates[certkey]["linkcertkeyname"] = chain_name
 
 
 def unlink_certificate(certkey: str, chain_name: str) -> None:
@@ -178,18 +176,16 @@ def unlink_certificate(certkey: str, chain_name: str) -> None:
         raise ValueError(f"Certificate {certkey} not found")
 
     cert = _certificates[certkey]
-    current_link = cert.get('linkcertkeyname')
+    current_link = cert.get("linkcertkeyname")
 
     if not current_link:
         raise ValueError(f"Certificate {certkey} is not linked to any chain")
 
     if current_link != chain_name:
-        raise ValueError(
-            f"Certificate {certkey} is linked to {current_link}, not {chain_name}"
-        )
+        raise ValueError(f"Certificate {certkey} is linked to {current_link}, not {chain_name}")
 
     # Remove the link
-    del _certificates[certkey]['linkcertkeyname']
+    del _certificates[certkey]["linkcertkeyname"]
 
 
 def list_certificates() -> Dict[str, Dict[str, Any]]:

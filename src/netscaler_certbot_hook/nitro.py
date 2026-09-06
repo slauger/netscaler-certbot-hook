@@ -48,8 +48,9 @@ __license__ = "MIT"
 __copyright__ = "Copyright 2020, IT Consulting Simon Lauger"
 __maintainer__ = "Simon Lauger"
 
+from typing import Any, Dict, Optional, Union
+
 import requests
-from typing import Dict, Optional, Union, Any
 
 
 class NitroClient:
@@ -81,10 +82,10 @@ class NitroClient:
         """
         self._url: str = url
         self._headers: Dict[str, str] = {
-            'X-NITRO-USER': username,
-            'X-NITRO-PASS': password,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
+            "X-NITRO-USER": username,
+            "X-NITRO-PASS": password,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
         }
         self._verify: bool = True
         self._result: Optional[requests.Response] = None
@@ -104,7 +105,7 @@ class NitroClient:
         Args:
             username (str): Administrator username.
         """
-        self._headers['X-NITRO-USER'] = username
+        self._headers["X-NITRO-USER"] = username
 
     def set_password(self, password: str) -> None:
         """Set the authentication password.
@@ -112,7 +113,7 @@ class NitroClient:
         Args:
             password (str): Administrator password.
         """
-        self._headers['X-NITRO-PASS'] = password
+        self._headers["X-NITRO-PASS"] = password
 
     def set_verify(self, verify: bool) -> None:
         """Set SSL certificate verification.
@@ -128,11 +129,17 @@ class NitroClient:
         Args:
             action (str): Error handling action (e.g., 'continue', 'halt').
         """
-        self._headers['X-NITRO-ONERROR'] = action
+        self._headers["X-NITRO-ONERROR"] = action
 
-    def request(self, method: str, endpoint: str, objecttype: str,
-                objectname: Optional[str] = None, params: Optional[Union[Dict[str, str], str]] = None,
-                data: Optional[str] = None) -> Union[Dict[str, Any], requests.Response]:
+    def request(
+        self,
+        method: str,
+        endpoint: str,
+        objecttype: str,
+        objectname: Optional[str] = None,
+        params: Optional[Union[Dict[str, str], str]] = None,
+        data: Optional[str] = None,
+    ) -> Union[Dict[str, Any], requests.Response]:
         """Make a request to the NITRO API.
 
         Args:
@@ -155,15 +162,15 @@ class NitroClient:
             >>> client.request('post', 'config', 'nsconfig', params={'action': 'save'})
         """
         # Build URL
-        url = '{}/nitro/v1/{}/{}'.format(self._url, endpoint, objecttype)
+        url = "{}/nitro/v1/{}/{}".format(self._url, endpoint, objecttype)
 
         if objectname is not None:
-            url += '/' + objectname
+            url += "/" + objectname
 
         if params is not None:
-            url += '?'
+            url += "?"
             if isinstance(params, dict):
-                url += '&'.join('{}={}'.format(k, v) for k, v in params.items())
+                url += "&".join("{}={}".format(k, v) for k, v in params.items())
             else:
                 url += params
 
@@ -171,7 +178,7 @@ class NitroClient:
         try:
             method_callback = getattr(requests, method)
         except AttributeError:
-            raise ValueError("Invalid HTTP method: {}".format(method))
+            raise ValueError("Invalid HTTP method: {}".format(method)) from None
 
         # Execute request with error handling
         try:
@@ -184,36 +191,41 @@ class NitroClient:
             )
             self._result.raise_for_status()
         except requests.exceptions.Timeout:
-            raise Exception("Request timeout while connecting to NetScaler at {}".format(url))
+            raise Exception(
+                "Request timeout while connecting to NetScaler at {}".format(url)
+            ) from None
         except requests.exceptions.ConnectionError as e:
-            raise Exception("Failed to connect to NetScaler at {}: {}".format(url, str(e)))
+            raise Exception("Failed to connect to NetScaler at {}: {}".format(url, str(e))) from e
         except requests.exceptions.HTTPError as e:
-            raise Exception("HTTP error from NetScaler: {}".format(str(e)))
+            raise Exception("HTTP error from NetScaler: {}".format(str(e))) from e
         except requests.exceptions.RequestException as e:
-            raise Exception("Request failed: {}".format(str(e)))
+            raise Exception("Request failed: {}".format(str(e))) from e
 
         # Parse response
         try:
-            result = self._result.json()
+            result: Union[Dict[str, Any], requests.Response] = self._result.json()
         except ValueError:
             # Not JSON response - return raw result
             result = self._result
 
         # Check for NITRO API errors
-        if isinstance(result, dict) and 'severity' in result:
-            if result['severity'] == 'ERROR':
+        if isinstance(result, dict) and "severity" in result:
+            if result["severity"] == "ERROR":
                 self._error = result
-                raise Exception('{} {}: {} ({})'.format(
-                    result['severity'],
-                    result['errorcode'],
-                    result['message'],
-                    url
-                ))
+                raise Exception(
+                    "{} {}: {} ({})".format(
+                        result["severity"], result["errorcode"], result["message"], url
+                    )
+                )
 
         return result
 
-    def get_stat(self, objecttype: str, objectname: Optional[str] = None,
-                 params: Optional[Union[Dict[str, str], str]] = None) -> Union[Dict[str, Any], requests.Response]:
+    def get_stat(
+        self,
+        objecttype: str,
+        objectname: Optional[str] = None,
+        params: Optional[Union[Dict[str, str], str]] = None,
+    ) -> Union[Dict[str, Any], requests.Response]:
         """Get statistics for a NetScaler object.
 
         Args:
@@ -224,10 +236,14 @@ class NitroClient:
         Returns:
             dict: Statistics response from the API.
         """
-        return self.request('get', 'stat', objecttype, objectname, params)
+        return self.request("get", "stat", objecttype, objectname, params)
 
-    def get_config(self, objecttype: str, objectname: Optional[str] = None,
-                   params: Optional[Union[Dict[str, str], str]] = None) -> Union[Dict[str, Any], requests.Response]:
+    def get_config(
+        self,
+        objecttype: str,
+        objectname: Optional[str] = None,
+        params: Optional[Union[Dict[str, str], str]] = None,
+    ) -> Union[Dict[str, Any], requests.Response]:
         """Get configuration for a NetScaler object.
 
         Args:
@@ -238,11 +254,15 @@ class NitroClient:
         Returns:
             dict: Configuration response from the API.
         """
-        return self.request('get', 'config', objecttype, objectname, params)
+        return self.request("get", "config", objecttype, objectname, params)
 
-    def post_stat(self, objecttype: str, objectname: Optional[str] = None,
-                  params: Optional[Union[Dict[str, str], str]] = None,
-                  data: Optional[str] = None) -> Union[Dict[str, Any], requests.Response]:
+    def post_stat(
+        self,
+        objecttype: str,
+        objectname: Optional[str] = None,
+        params: Optional[Union[Dict[str, str], str]] = None,
+        data: Optional[str] = None,
+    ) -> Union[Dict[str, Any], requests.Response]:
         """Create or update statistics object.
 
         Args:
@@ -254,11 +274,15 @@ class NitroClient:
         Returns:
             dict: API response.
         """
-        return self.request('post', 'stat', objecttype, objectname, params, data)
+        return self.request("post", "stat", objecttype, objectname, params, data)
 
-    def post_config(self, objecttype: str, objectname: Optional[str] = None,
-                    params: Optional[Union[Dict[str, str], str]] = None,
-                    data: Optional[str] = None) -> Union[Dict[str, Any], requests.Response]:
+    def post_config(
+        self,
+        objecttype: str,
+        objectname: Optional[str] = None,
+        params: Optional[Union[Dict[str, str], str]] = None,
+        data: Optional[str] = None,
+    ) -> Union[Dict[str, Any], requests.Response]:
         """Create or update configuration object.
 
         Args:
@@ -270,11 +294,15 @@ class NitroClient:
         Returns:
             dict: API response.
         """
-        return self.request('post', 'config', objecttype, objectname, params, data)
+        return self.request("post", "config", objecttype, objectname, params, data)
 
-    def put_stat(self, objecttype: str, objectname: Optional[str] = None,
-                 params: Optional[Union[Dict[str, str], str]] = None,
-                 data: Optional[str] = None) -> Union[Dict[str, Any], requests.Response]:
+    def put_stat(
+        self,
+        objecttype: str,
+        objectname: Optional[str] = None,
+        params: Optional[Union[Dict[str, str], str]] = None,
+        data: Optional[str] = None,
+    ) -> Union[Dict[str, Any], requests.Response]:
         """Update statistics object.
 
         Args:
@@ -286,11 +314,15 @@ class NitroClient:
         Returns:
             dict: API response.
         """
-        return self.request('put', 'stat', objecttype, objectname, params, data)
+        return self.request("put", "stat", objecttype, objectname, params, data)
 
-    def put_config(self, objecttype: str, objectname: Optional[str] = None,
-                   params: Optional[Union[Dict[str, str], str]] = None,
-                   data: Optional[str] = None) -> Union[Dict[str, Any], requests.Response]:
+    def put_config(
+        self,
+        objecttype: str,
+        objectname: Optional[str] = None,
+        params: Optional[Union[Dict[str, str], str]] = None,
+        data: Optional[str] = None,
+    ) -> Union[Dict[str, Any], requests.Response]:
         """Update configuration object.
 
         Args:
@@ -302,10 +334,14 @@ class NitroClient:
         Returns:
             dict: API response.
         """
-        return self.request('put', 'config', objecttype, objectname, params, data)
+        return self.request("put", "config", objecttype, objectname, params, data)
 
-    def delete_stat(self, objecttype: str, objectname: Optional[str] = None,
-                    params: Optional[Union[Dict[str, str], str]] = None) -> Union[Dict[str, Any], requests.Response]:
+    def delete_stat(
+        self,
+        objecttype: str,
+        objectname: Optional[str] = None,
+        params: Optional[Union[Dict[str, str], str]] = None,
+    ) -> Union[Dict[str, Any], requests.Response]:
         """Delete statistics object.
 
         Args:
@@ -316,10 +352,14 @@ class NitroClient:
         Returns:
             dict: API response.
         """
-        return self.request('delete', 'stat', objecttype, objectname, params)
+        return self.request("delete", "stat", objecttype, objectname, params)
 
-    def delete_config(self, objecttype: str, objectname: Optional[str] = None,
-                      params: Optional[Union[Dict[str, str], str]] = None) -> Union[Dict[str, Any], requests.Response]:
+    def delete_config(
+        self,
+        objecttype: str,
+        objectname: Optional[str] = None,
+        params: Optional[Union[Dict[str, str], str]] = None,
+    ) -> Union[Dict[str, Any], requests.Response]:
         """Delete configuration object.
 
         Args:
@@ -330,4 +370,4 @@ class NitroClient:
         Returns:
             dict: API response.
         """
-        return self.request('delete', 'config', objecttype, objectname, params)
+        return self.request("delete", "config", objecttype, objectname, params)
