@@ -18,7 +18,7 @@ This mock server simulates the most important NetScaler NITRO API endpoints requ
 
 ```bash
 # Install development dependencies
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 ```
 
 ## Usage
