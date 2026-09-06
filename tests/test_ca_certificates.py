@@ -8,25 +8,25 @@ Certificate Authorities and tests the CN extraction and sanitization logic
 to ensure NetScaler-compatible object names are generated.
 """
 
-import sys
 import os
+import sys
 import tempfile
+
 import requests
 from OpenSSL import crypto
 
 # Add src directory to path to import our module
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 from netscaler_certbot_hook.cli import get_certificate_cn
-
 
 # CA Certificates to test
 CA_CERTIFICATES = {
-    'Let\'s Encrypt R10': 'https://letsencrypt.org/certs/2024/r10.pem',
-    'Let\'s Encrypt R11': 'https://letsencrypt.org/certs/2024/r11.pem',
-    'Let\'s Encrypt E5': 'https://letsencrypt.org/certs/2024/e5.pem',
-    'Let\'s Encrypt E6': 'https://letsencrypt.org/certs/2024/e6.pem',
-    'ZeroSSL RSA': 'http://zerossl.crt.sectigo.com/ZeroSSLRSADomainSecureSiteCA.crt',
-    'GoDaddy G2': 'https://certs.godaddy.com/repository/gdig2.crt.pem',
+    "Let's Encrypt R10": "https://letsencrypt.org/certs/2024/r10.pem",
+    "Let's Encrypt R11": "https://letsencrypt.org/certs/2024/r11.pem",
+    "Let's Encrypt E5": "https://letsencrypt.org/certs/2024/e5.pem",
+    "Let's Encrypt E6": "https://letsencrypt.org/certs/2024/e6.pem",
+    "ZeroSSL RSA": "http://zerossl.crt.sectigo.com/ZeroSSLRSADomainSecureSiteCA.crt",
+    "GoDaddy G2": "https://certs.godaddy.com/repository/gdig2.crt.pem",
     # Add more CAs as needed
 }
 
@@ -53,10 +53,10 @@ def download_certificate(url):
 
         # Try to decode as text (PEM)
         try:
-            content_text = content.decode('utf-8')
+            content_text = content.decode("utf-8")
             # If it's PEM format, it should contain BEGIN CERTIFICATE
-            if 'BEGIN CERTIFICATE' in content_text:
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False) as f:
+            if "BEGIN CERTIFICATE" in content_text:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as f:
                     f.write(content_text)
                     return f.name
         except UnicodeDecodeError:
@@ -64,14 +64,14 @@ def download_certificate(url):
 
         # If not PEM, assume DER and convert to PEM
         cert = crypto.load_certificate(crypto.FILETYPE_ASN1, content)
-        pem_data = crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode('utf-8')
+        pem_data = crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode("utf-8")
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as f:
             f.write(pem_data)
             return f.name
 
     except Exception as e:
-        raise Exception(f"Failed to download {url}: {e}")
+        raise Exception(f"Failed to download {url}: {e}") from e
 
 
 def get_raw_cn(cert_file):
@@ -83,7 +83,7 @@ def get_raw_cn(cert_file):
     Returns:
         str: Raw Common Name from certificate
     """
-    with open(cert_file, 'r') as f:
+    with open(cert_file, "r") as f:
         cert_data = f.read()
     cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_data)
     subject = cert.get_subject()
@@ -115,12 +115,12 @@ def validate_netscaler_name(name):
         return is_valid, warnings
 
     # Check first character (must be alphanumeric or underscore)
-    if not (name[0].isalnum() or name[0] == '_'):
+    if not (name[0].isalnum() or name[0] == "_"):
         warnings.append(f"Must start with alphanumeric or underscore, got '{name[0]}'")
         is_valid = False
 
     # Check allowed characters (conservative whitelist)
-    allowed_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ')
+    allowed_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ")
     invalid_chars = [c for c in name if c not in allowed_chars]
     if invalid_chars:
         warnings.append(f"Invalid chars: {set(invalid_chars)}")
@@ -168,28 +168,32 @@ def main():
 
             print(f"  Status: {status}")
 
-            results.append({
-                'ca': ca_name,
-                'raw_cn': raw_cn,
-                'sanitized': sanitized_cn,
-                'length': len(sanitized_cn),
-                'valid': is_valid,
-                'warnings': warnings
-            })
+            results.append(
+                {
+                    "ca": ca_name,
+                    "raw_cn": raw_cn,
+                    "sanitized": sanitized_cn,
+                    "length": len(sanitized_cn),
+                    "valid": is_valid,
+                    "warnings": warnings,
+                }
+            )
 
             # Cleanup
             os.unlink(cert_file)
 
         except Exception as e:
             print(f"  ERROR: {e}")
-            results.append({
-                'ca': ca_name,
-                'raw_cn': 'ERROR',
-                'sanitized': 'ERROR',
-                'length': 0,
-                'valid': False,
-                'warnings': [str(e)]
-            })
+            results.append(
+                {
+                    "ca": ca_name,
+                    "raw_cn": "ERROR",
+                    "sanitized": "ERROR",
+                    "length": 0,
+                    "valid": False,
+                    "warnings": [str(e)],
+                }
+            )
 
         print()
 
@@ -202,21 +206,30 @@ def main():
     print("-" * 80)
 
     for result in results:
-        status = "✓" if result['valid'] else "✗"
-        raw_cn_truncated = result['raw_cn'][:33] + '...' if len(result['raw_cn']) > 35 else result['raw_cn']
-        sanitized_truncated = result['sanitized'][:18] + '...' if len(result['sanitized']) > 20 else result['sanitized']
+        status = "✓" if result["valid"] else "✗"
+        raw_cn_truncated = (
+            result["raw_cn"][:33] + "..." if len(result["raw_cn"]) > 35 else result["raw_cn"]
+        )
+        sanitized_truncated = (
+            result["sanitized"][:18] + "..."
+            if len(result["sanitized"]) > 20
+            else result["sanitized"]
+        )
 
-        print(f"{result['ca']:<25} {raw_cn_truncated:<35} {sanitized_truncated:<20} {result['length']:<5} {status:<10}")
+        print(
+            f"{result['ca']:<25} {raw_cn_truncated:<35} "
+            f"{sanitized_truncated:<20} {result['length']:<5} {status:<10}"
+        )
 
-        if result['warnings']:
-            for warning in result['warnings']:
+        if result["warnings"]:
+            for warning in result["warnings"]:
                 print(f"  ⚠ {warning}")
 
     print()
     print("=" * 80)
 
     # Check if all passed
-    all_valid = all(r['valid'] for r in results)
+    all_valid = all(r["valid"] for r in results)
     if all_valid:
         print("✓ All tests passed!")
         return 0
@@ -225,5 +238,5 @@ def main():
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
