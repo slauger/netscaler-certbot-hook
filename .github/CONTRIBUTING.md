@@ -14,8 +14,7 @@ cd netscaler-certbot-hook
 ```bash
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 3. Make your changes in a feature branch:
