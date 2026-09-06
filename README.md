@@ -22,42 +22,27 @@ Perfect for automating certificate lifecycle management in combination with DNS-
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     LE["Let's Encrypt<br/>Certificate Authority"]
     CB["Certbot<br/>ACME Client"]
     Hook["netscaler-certbot-hook<br/>Deploy Hook"]
     NS["NetScaler ADC<br/>Load Balancer"]
 
-    LE -->|"issue / renew certificate<br/>(DNS-01 challenge)"| CB
-    CB -->|"run deploy hook<br/>(cert.pem, privkey.pem, chain.pem)"| Hook
+    LE -->|"DNS-01 challenge"| CB
+    CB -->|"cert.pem, privkey.pem, chain.pem"| Hook
     Hook -->|"NITRO API (HTTPS)"| NS
 ```
 
-The script connects to your NetScaler via NITRO API, compares certificate serial numbers, and performs uploads/installations only when necessary. Chain certificates are handled separately for security reasons.
+The script connects to your NetScaler via NITRO API, compares certificate serial numbers, and performs uploads/installations only when necessary. Chain certificates are handled separately for security reasons: they are checked the same way first and only updated when `--update-chain` is set.
 
 ```mermaid
-sequenceDiagram
-    participant Hook as netscaler-certbot-hook
-    participant NS as NetScaler (NITRO API)
-
-    Hook->>NS: get chain certificate
-    alt chain not installed
-        Hook->>NS: upload chain.pem, install chain certificate
-    else serial differs
-        Note over Hook,NS: update chain (--update-chain) or abort
-    else serial matches
-        Note over Hook,NS: nothing to do
-    end
-
-    Hook->>NS: get certificate
-    alt certificate missing or serial differs
-        Hook->>NS: upload cert.pem + privkey.pem
-        Hook->>NS: install or update certificate
-        Hook->>NS: link certificate to chain
-        Hook->>NS: save configuration
-    else serial matches
-        Note over Hook,NS: nothing to do
-    end
+flowchart TD
+    A(["Certbot renews certificate"]) --> B{"serial on NetScaler<br/>matches local certificate?"}
+    B -->|"yes"| C(["nothing to do"])
+    B -->|"no / not installed"| D["upload cert + key"]
+    D --> E["install or update certificate"]
+    E --> F["link to chain certificate"]
+    F --> G["save configuration"]
 ```
 
 ## Prerequisites
