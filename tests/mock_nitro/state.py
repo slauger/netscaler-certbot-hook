@@ -162,15 +162,16 @@ def link_certificate(certkey: str, chain_name: str) -> None:
     _certificates[certkey]["linkcertkeyname"] = chain_name
 
 
-def unlink_certificate(certkey: str, chain_name: str) -> None:
+def unlink_certificate(certkey: str, chain_name: Optional[str] = None) -> None:
     """Unlink a certificate from a chain certificate.
 
     Args:
         certkey: Certificate name to unlink
-        chain_name: Chain certificate name
+        chain_name: Chain certificate name (optional, like the real NITRO API)
 
     Raises:
-        ValueError: If certificate doesn't exist or is not linked to specified chain
+        ValueError: If certificate doesn't exist, is not linked, or is linked
+            to a different chain than the one specified
     """
     if certkey not in _certificates:
         raise ValueError(f"Certificate {certkey} not found")
@@ -181,7 +182,7 @@ def unlink_certificate(certkey: str, chain_name: str) -> None:
     if not current_link:
         raise ValueError(f"Certificate {certkey} is not linked to any chain")
 
-    if current_link != chain_name:
+    if chain_name is not None and current_link != chain_name:
         raise ValueError(f"Certificate {certkey} is linked to {current_link}, not {chain_name}")
 
     # Remove the link

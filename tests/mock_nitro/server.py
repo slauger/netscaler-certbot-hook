@@ -258,14 +258,12 @@ def unlink_certificate(cert_data: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
         Tuple of (response dict, status code)
     """
     certkey = cert_data["certkey"]
+    # linkcertkeyname is optional for unlink, like on the real NITRO API
     chain_name = cert_data.get("linkcertkeyname")
-
-    if not chain_name:
-        return error_response(1094, "Invalid argument [linkcertkeyname]")
 
     try:
         state.unlink_certificate(certkey, chain_name)
-        logger.info(f"Certificate unlinked: {certkey} -X- {chain_name}")
+        logger.info(f"Certificate unlinked: {certkey} -X- {chain_name or 'current chain'}")
         return success_response()
     except ValueError as e:
         error_msg = str(e)

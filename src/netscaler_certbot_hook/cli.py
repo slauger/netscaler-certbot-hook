@@ -340,6 +340,36 @@ def nitro_link_cert(
     )
 
 
+def nitro_unlink_cert(
+    nitro_client: nitro.NitroClient, name: str
+) -> Union[Dict[str, Any], requests.Response]:
+    """Unlink a certificate from its current chain certificate.
+
+    Args:
+        nitro_client (NitroClient): Configured NITRO API client instance.
+        name (str): Certificate object name.
+
+    Returns:
+        dict: API response from the unlink operation.
+
+    Raises:
+        Exception: If the unlink operation fails (e.g., no link exists).
+    """
+    return nitro_client.request(
+        "post",
+        endpoint="config",
+        objecttype="sslcertkey",
+        data=json.dumps(
+            {
+                "sslcertkey": {
+                    "certkey": name,
+                }
+            }
+        ),
+        params={"action": "unlink"},
+    )
+
+
 def nitro_save_config(nitro_client: nitro.NitroClient) -> Union[Dict[str, Any], requests.Response]:
     """Save the NetScaler running configuration to disk.
 
@@ -649,6 +679,7 @@ def install_or_update_certificate(
     config: Dict[str, Any],
     cert_serial: int,
     update: bool = False,
+    current_link: Optional[str] = None,
 ) -> None:
     """Install or update a certificate on the NetScaler.
 
@@ -661,6 +692,8 @@ def install_or_update_certificate(
         cert_serial (int): Serial number of the certificate being installed.
         update (bool, optional): True to update existing certificate, False to create new.
                                 Defaults to False.
+        current_link (str, optional): Chain the certificate is currently linked to.
+                                Defaults to None.
 
     Note:
         This function automatically handles linking to the chain certificate and
@@ -688,6 +721,38 @@ def install_or_update_certificate(
         no_domain_check=config["no_domain_check"],
     )
 
+    relink_certificate(nitro_client, config, current_link)
+
+    logger.info("saving configuration")
+    nitro_save_config(nitro_client)
+
+
+def relink_certificate(
+    nitro_client: nitro.NitroClient, config: Dict[str, Any], current_link: Optional[str]
+) -> None:
+    """Ensure the certificate is linked to the configured chain certificate.
+
+    Unlinks the certificate from a previously linked chain first if it points
+    to a different chain (e.g. after a CA rotation from E6 to E7).
+
+    Args:
+        nitro_client (NitroClient): Configured NITRO API client instance.
+        config (dict): Configuration dictionary from get_config().
+        current_link (str, optional): Chain the certificate is currently linked to,
+            or None if it is not linked.
+    """
+    if current_link == config["chain_name"]:
+        logger.info("certificate link to chain certificate %s already present", current_link)
+        return
+
+    if current_link:
+        logger.info(
+            "unlinking certificate %s from old chain certificate %s",
+            config["cert_name"],
+            current_link,
+        )
+        nitro_unlink_cert(nitro_client, config["cert_name"])
+
     logger.info(
         "link certificate %s to chain certificate %s", config["cert_name"], config["chain_name"]
     )
@@ -696,9 +761,6 @@ def install_or_update_certificate(
     except Exception:
         # Link already exists, which is fine
         logger.info("certificate link was already present - nothing to do")
-
-    logger.info("saving configuration")
-    nitro_save_config(nitro_client)
 
 
 def process_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Any]) -> None:
@@ -712,7 +774,7 @@ def process_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Any])
         config (dict): Configuration dictionary from get_config().
 
     Behavior:
-        - If certificate exists and serial matches: No action taken
+        - If certificate exists and serial matches: Only relinks if the chain changed
         - If certificate exists and serial differs: Updates the certificate
         - If certificate doesn't exist: Installs new certificate
     """
@@ -720,13 +782,29 @@ def process_certificate(nitro_client: nitro.NitroClient, config: Dict[str, Any])
     check_cert = nitro_check_cert(nitro_client, config["cert_name"])
 
     if check_cert:
-        installed_serial = int(check_cert["sslcertkey"][0]["serial"], 16)
+        cert_info = check_cert["sslcertkey"][0]
+        installed_serial = int(cert_info["serial"], 16)
+        current_link = cert_info.get("linkcertkeyname")
         logger.info("certificate %s found with serial %s", config["cert_name"], installed_serial)
 
         if installed_serial == cert_serial:
-            logger.info("installed certificate matches our serial - nothing to do")
+            if current_link == config["chain_name"]:
+                logger.info("installed certificate matches our serial - nothing to do")
+            else:
+                # Certificate is unchanged but the chain rotated (e.g. E6 -> E7)
+                logger.info(
+                    "installed certificate matches our serial but is linked to %s "
+                    "instead of %s - relinking",
+                    current_link,
+                    config["chain_name"],
+                )
+                relink_certificate(nitro_client, config, current_link)
+                logger.info("saving configuration")
+                nitro_save_config(nitro_client)
         else:
-            install_or_update_certificate(nitro_client, config, cert_serial, update=True)
+            install_or_update_certificate(
+                nitro_client, config, cert_serial, update=True, current_link=current_link
+            )
     else:
         logger.info("certificate %s not found", config["cert_name"])
         install_or_update_certificate(nitro_client, config, cert_serial, update=False)

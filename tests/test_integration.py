@@ -351,27 +351,19 @@ def test_chain_rotation_issue_12(mock_server, temp_certs, env_vars):
     with open(temp_certs["chain"], "wb") as f:
         f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, new_chain))
 
-    # Run hook again - this should detect chain rotation
-    # NOTE: Current implementation might not handle this automatically yet!
-    # This test will likely FAIL until Issue #12 is fixed.
-    try:
-        run_hook("example.com", temp_certs, update_chain=True, no_domain_check=True)
+    # Run hook again - this must detect the chain rotation and relink
+    run_hook("example.com", temp_certs, update_chain=True, no_domain_check=True)
 
-        # If we get here, check if rotation worked
-        main_cert_after = state.get_certificate("example.com")
+    main_cert_after = state.get_certificate("example.com")
 
-        # The cert should now be linked to E7
-        assert (
-            main_cert_after.get("linkcertkeyname") == "E7"
-        ), "After chain rotation, main cert should be linked to E7"
+    # The cert should now be linked to E7
+    assert (
+        main_cert_after.get("linkcertkeyname") == "E7"
+    ), "After chain rotation, main cert should be linked to E7"
 
-        # Both chains should exist
-        assert state.get_certificate("E6") is not None, "E6 should still exist"
-        assert state.get_certificate("E7") is not None, "E7 should exist"
-
-    except Exception as e:
-        # If this fails, it's expected until Issue #12 is implemented
-        pytest.skip(f"Chain rotation not yet implemented (Issue #12): {e}")
+    # Both chains should exist
+    assert state.get_certificate("E6") is not None, "E6 should still exist"
+    assert state.get_certificate("E7") is not None, "E7 should exist"
 
 
 def test_authentication_error(mock_server, temp_certs):
