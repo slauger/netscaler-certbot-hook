@@ -42,6 +42,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import time
 from typing import Any, Dict, Optional, Union
@@ -53,6 +54,30 @@ from . import nitro
 
 # Initialize logger
 logger = logging.getLogger(__name__)
+
+# NetScaler object names must begin with an ASCII alphanumeric or underscore,
+# may contain only ASCII alphanumerics and _ # . space : @ = - characters,
+# and are limited to 31 characters (sslcertkey limit)
+NETSCALER_OBJECT_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_#. :@=-]{0,30}$")
+
+
+def validate_object_name(name: str, option: str) -> None:
+    """Validate a user-supplied NetScaler object name.
+
+    Args:
+        name (str): The object name to validate.
+        option (str): Name of the CLI option the value came from (for the error message).
+
+    Raises:
+        ValueError: If the name is not a valid NetScaler object name.
+    """
+    if not NETSCALER_OBJECT_NAME_RE.match(name):
+        raise ValueError(
+            "invalid NetScaler object name {!r} for {}: must start with a letter, digit or "
+            "underscore, may only contain letters, digits and '_#. :@=-' and must not be "
+            "longer than 31 characters".format(name, option)
+        )
+
 
 add_args = {
     "--name": {
@@ -396,6 +421,11 @@ def get_config(args: argparse.Namespace) -> Dict[str, Any]:
         >>> print(config['url'])
         'https://192.168.10.10'
     """
+    # Fail fast on invalid object names instead of surfacing cryptic NITRO errors
+    validate_object_name(args.name, "--name")
+    if args.chain is not None:
+        validate_object_name(args.chain, "--chain")
+
     config = {
         "username": os.getenv("NS_LOGIN", "nsroot"),
         "password": os.getenv("NS_PASSWORD", "nsroot"),
