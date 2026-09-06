@@ -21,9 +21,29 @@ Perfect for automating certificate lifecycle management in combination with DNS-
 
 ## Architecture
 
-![Architecture](https://raw.githubusercontent.com/slauger/netscaler-certbot-hook/master/architecture.jpg)
+```mermaid
+flowchart TD
+    LE["Let's Encrypt<br/>Certificate Authority"]
+    CB["Certbot<br/>ACME Client"]
+    Hook["netscaler-certbot-hook<br/>Deploy Hook"]
+    NS["NetScaler ADC<br/>Load Balancer"]
 
-The script connects to your NetScaler via NITRO API, compares certificate serial numbers, and performs uploads/installations only when necessary. Chain certificates are handled separately for security reasons.
+    LE -->|"DNS-01 challenge"| CB
+    CB -->|"cert.pem, privkey.pem, chain.pem"| Hook
+    Hook -->|"NITRO API (HTTPS)"| NS
+```
+
+The script connects to your NetScaler via NITRO API, compares certificate serial numbers, and performs uploads/installations only when necessary. Chain certificates are handled separately for security reasons: they are checked the same way first and only updated when `--update-chain` is set.
+
+```mermaid
+flowchart TD
+    A(["Certbot renews certificate"]) --> B{"serial on NetScaler<br/>matches local certificate?"}
+    B -->|"yes"| C(["nothing to do"])
+    B -->|"no / not installed"| D["upload cert + key"]
+    D --> E["install or update certificate"]
+    E --> F["link to chain certificate"]
+    F --> G["save configuration"]
+```
 
 ## Prerequisites
 
