@@ -64,9 +64,12 @@ add_args = {
     },
     "--chain": {
         "metavar": "<string>",
-        "help": "object name of the ssl chain certificate",
+        "help": (
+            "object name of the ssl chain certificate "
+            "(default: auto-detected from the chain certificate CN)"
+        ),
         "type": str,
-        "default": "letsencrypt",
+        "default": None,
         "required": False,
     },
     "--cert": {
@@ -339,7 +342,7 @@ def parse_arguments() -> argparse.Namespace:
     Returns:
         argparse.Namespace: Parsed command line arguments containing:
             - name: Certificate object name (required)
-            - chain: Chain certificate name (default: 'letsencrypt')
+            - chain: Chain certificate name (default: auto-detected from CN)
             - cert: Path to certificate file (optional)
             - privkey: Path to private key file (optional)
             - chain_cert: Path to chain certificate file (optional)
@@ -430,16 +433,16 @@ def get_config(args: argparse.Namespace) -> Dict[str, Any]:
         if not os.path.isfile(file_path):
             raise FileNotFoundError("{} not found: {}".format(file_key, file_path))
 
-    # If chain name is default 'letsencrypt', try to auto-detect from chain certificate CN
-    if config["chain_name"] == "letsencrypt":
+    # Without an explicit --chain, auto-detect the name from the chain certificate CN
+    if config["chain_name"] is None:
         try:
             chain_cn = get_certificate_cn(config["chain_file"])
             config["chain_name"] = chain_cn
             logger.debug("Auto-detected chain certificate name from CN: %s", chain_cn)
         except Exception as e:
-            # If CN extraction fails, keep the default 'letsencrypt'
+            config["chain_name"] = "letsencrypt"
             logger.debug(
-                "Could not auto-detect chain name from CN (%s), using default: %s",
+                "Could not auto-detect chain name from CN (%s), using fallback: %s",
                 str(e),
                 config["chain_name"],
             )
